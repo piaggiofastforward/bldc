@@ -46,7 +46,9 @@ bool utils_saturate_vector_2d(float *x, float *y, float max);
 void utils_fast_sincos(float angle, float *sin, float *cos);
 void utils_fast_sincos_better(float angle, float *sin, float *cos);
 void utils_sys_lock_cnt(void);
+void utils_sys_lock_cnt_from_isr(void);
 void utils_sys_unlock_cnt(void);
+void utils_sys_unlock_cnt_from_isr(void);
 
 // Return the sign of the argument. -1 if negative, 1 if zero or positive.
 #define SIGN(x)				((x<0)?-1:1)

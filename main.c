@@ -25,7 +25,6 @@
 #include <stdlib.h>
 
 #include "mc_interface.h"
-#include "mcpwm.h"
 #include "mcpwm_foc.h"
 #include "ledpwm.h"
 #include "comm_usb.h"
@@ -33,8 +32,6 @@
 #include "terminal.h"
 #include "hw.h"
 #include "app.h"
-#include "packet.h"
-#include "commands.h"
 #include "timeout.h"
 #include "comm_can.h"
 #include "ws2811.h"
@@ -71,7 +68,6 @@
 
 
 static THD_WORKING_AREA(periodic_thread_wa, 1024);
-static THD_WORKING_AREA(timer_thread_wa, 128);
 
 static THD_FUNCTION(periodic_thread, arg) {
 	(void)arg;
@@ -99,56 +95,7 @@ static THD_FUNCTION(periodic_thread, arg) {
 			ledpwm_set_intensity(LED_RED, 0.0);
 		}
 
-		if (mc_interface_get_state() == MC_STATE_DETECTING) {
-			commands_send_rotor_pos(mcpwm_get_detect_pos());
-		}
-
-		disp_pos_mode display_mode = commands_get_disp_pos_mode();
-
-		switch (display_mode) {
-			case DISP_POS_MODE_ENCODER:
-				commands_send_rotor_pos(encoder_read_deg());
-				break;
-
-			case DISP_POS_MODE_PID_POS:
-				commands_send_rotor_pos(mc_interface_get_pid_pos_now());
-				break;
-
-			case DISP_POS_MODE_PID_POS_ERROR:
-				commands_send_rotor_pos(utils_angle_difference(mc_interface_get_pid_pos_set(), mc_interface_get_pid_pos_now()));
-				break;
-
-			default:
-				break;
-		}
-
-		if (mc_interface_get_configuration()->motor_type == MOTOR_TYPE_FOC) {
-			switch (display_mode) {
-			case DISP_POS_MODE_OBSERVER:
-				commands_send_rotor_pos(mcpwm_foc_get_phase_observer());
-				break;
-
-			case DISP_POS_MODE_ENCODER_OBSERVER_ERROR:
-				commands_send_rotor_pos(utils_angle_difference(mcpwm_foc_get_phase_observer(), mcpwm_foc_get_phase_encoder()));
-				break;
-
-			default:
-				break;
-		}
-		}
-
 		chThdSleepMilliseconds(10);
-	}
-}
-
-static THD_FUNCTION(timer_thread, arg) {
-	(void)arg;
-
-	chRegSetThreadName("msec_timer");
-
-	for(;;) {
-		packet_timerfunc();
-		chThdSleepMilliseconds(1);
 	}
 }
 
@@ -169,9 +116,6 @@ int main(void) {
 	conf_general_read_mc_configuration(&mcconf);
 	mc_interface_init(&mcconf);
 
-	commands_init();
-	comm_usb_init();
-
 	app_configuration appconf;
 	conf_general_read_app_configuration(&appconf);
 	app_init(&appconf);
@@ -179,32 +123,10 @@ int main(void) {
 	timeout_init();
 	timeout_configure(appconf.timeout_msec, appconf.timeout_brake_current);
 
-#if CAN_ENABLE
-	comm_can_init();
-#endif
-
-#if WS2811_ENABLE
-	ws2811_init();
-	led_external_init();
-#endif
-
-#if SERVO_OUT_ENABLE
-#if SERVO_OUT_SIMPLE
-	servo_simple_init();
-#else
-	servo_init();
-#endif
-#endif
-
 	// Threads
 	chThdCreateStatic(periodic_thread_wa, sizeof(periodic_thread_wa), NORMALPRIO, periodic_thread, NULL);
-	chThdCreateStatic(timer_thread_wa, sizeof(timer_thread_wa), NORMALPRIO, timer_thread, NULL);
 
 	for(;;) {
-		chThdSleepMilliseconds(10);
-
-		if (encoder_is_configured()) {
-			//		comm_can_set_pos(0, encoder_read_deg());
-		}
+		chThdYield();
 	}
 }

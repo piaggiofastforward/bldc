@@ -459,9 +459,16 @@ void utils_fast_sincos_better(float angle, float *sin, float *cos) {
  * be called five times as well. Note that chSysLock and chSysLockFromIsr are the same
  * for this port.
  */
-void utils_sys_lock_cnt(void) {
+void utils_sys_lock_cnt() {
 	if (!sys_lock_cnt) {
-		chSysLock();
+    chSysLock();
+	}
+	sys_lock_cnt++;
+}
+
+void utils_sys_lock_cnt_from_isr() {
+	if (!sys_lock_cnt) {
+    chSysLockFromISR();
 	}
 	sys_lock_cnt++;
 }
@@ -472,11 +479,20 @@ void utils_sys_lock_cnt(void) {
  * be called five times as well. Note that chSysUnlock and chSysUnlockFromIsr are the same
  * for this port.
  */
-void utils_sys_unlock_cnt(void) {
+void utils_sys_unlock_cnt() {
 	if (sys_lock_cnt) {
 		sys_lock_cnt--;
 		if (!sys_lock_cnt) {
-			chSysUnlock();
+      chSysUnlock();
+		}
+	}
+}
+
+void utils_sys_unlock_cnt_from_isr() {
+	if (sys_lock_cnt) {
+		sys_lock_cnt--;
+		if (!sys_lock_cnt) {
+      chSysUnlockFromISR();
 		}
 	}
 }

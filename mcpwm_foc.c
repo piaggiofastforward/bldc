@@ -31,9 +31,7 @@
 #include "utils.h"
 #include "ledpwm.h"
 #include "hw.h"
-#include "terminal.h"
 #include "encoder.h"
-#include "commands.h"
 #include "timeout.h"
 #include <math.h>
 #include <string.h>
@@ -1517,48 +1515,12 @@ void mcpwm_foc_adc_inj_int_handler(void) {
 					&m_observer_x1, &m_observer_x2, &m_phase_now_observer);
 		}
 
-		switch (m_conf->foc_sensor_mode) {
-		case FOC_SENSOR_MODE_ENCODER:
-			if (encoder_index_found()) {
-				m_motor_state.phase = correct_encoder(m_phase_now_observer, m_phase_now_encoder, m_pll_speed);
-			} else {
-				// Rotate the motor in open loop if the index isn't found.
-				m_motor_state.phase = m_phase_now_encoder_no_index;
-			}
+    m_phase_now_observer = correct_hall(m_phase_now_observer, m_pll_speed, dt);
+    m_motor_state.phase = m_phase_now_observer;
 
-			if (!m_phase_override) {
-				id_set_tmp = 0.0;
-			}
-			break;
-		case FOC_SENSOR_MODE_HALL:
-			m_phase_now_observer = correct_hall(m_phase_now_observer, m_pll_speed, dt);
-			m_motor_state.phase = m_phase_now_observer;
-
-			if (!m_phase_override) {
-				id_set_tmp = 0.0;
-			}
-			break;
-		case FOC_SENSOR_MODE_SENSORLESS:
-			if (m_phase_observer_override) {
-				m_motor_state.phase = m_phase_now_observer_override;
-			} else {
-				m_motor_state.phase = m_phase_now_observer;
-			}
-
-			// Inject D axis current at low speed to make the observer track
-			// better. This does not seem to be necessary with dead time
-			// compensation.
-			// Note: this is done at high rate prevent noise.
-			if (!m_phase_override) {
-				if (duty_abs < m_conf->foc_sl_d_current_duty) {
-					id_set_tmp = utils_map(duty_abs, 0.0, m_conf->foc_sl_d_current_duty,
-							fabsf(m_motor_state.iq_target) * m_conf->foc_sl_d_current_factor, 0.0);
-				} else {
-					id_set_tmp = 0.0;
-				}
-			}
-			break;
-		}
+    if (!m_phase_override) {
+      id_set_tmp = 0.0;
+    }
 
 		if (m_phase_override) {
 			m_motor_state.phase = m_phase_now_override;
@@ -1614,18 +1576,8 @@ void mcpwm_foc_adc_inj_int_handler(void) {
 				m_motor_state.i_alpha, m_motor_state.i_beta, dt, &m_observer_x1,
 				&m_observer_x2, &m_phase_now_observer);
 
-		switch (m_conf->foc_sensor_mode) {
-		case FOC_SENSOR_MODE_ENCODER:
-			m_motor_state.phase = correct_encoder(m_phase_now_observer, m_phase_now_encoder, m_pll_speed);
-			break;
-		case FOC_SENSOR_MODE_HALL:
-			m_phase_now_observer = correct_hall(m_phase_now_observer, m_pll_speed, dt);
-			m_motor_state.phase = m_phase_now_observer;
-			break;
-		case FOC_SENSOR_MODE_SENSORLESS:
-			m_motor_state.phase = m_phase_now_observer;
-			break;
-		}
+    m_phase_now_observer = correct_hall(m_phase_now_observer, m_pll_speed, dt);
+    m_motor_state.phase = m_phase_now_observer;
 	}
 
 	// Calculate duty cycle

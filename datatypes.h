@@ -38,35 +38,6 @@ typedef enum {
 } mc_state;
 
 typedef enum {
-	PWM_MODE_NONSYNCHRONOUS_HISW = 0, // This mode is not recommended
-	PWM_MODE_SYNCHRONOUS, // The recommended and most tested mode
-	PWM_MODE_BIPOLAR // Some glitches occasionally, can kill MOSFETs
-} mc_pwm_mode;
-
-typedef enum {
-	COMM_MODE_INTEGRATE = 0,
-	COMM_MODE_DELAY
-} mc_comm_mode;
-
-typedef enum {
-	SENSOR_MODE_SENSORLESS = 0,
-	SENSOR_MODE_SENSORED,
-	SENSOR_MODE_HYBRID
-} mc_sensor_mode;
-
-typedef enum {
-	FOC_SENSOR_MODE_SENSORLESS = 0,
-	FOC_SENSOR_MODE_ENCODER,
-	FOC_SENSOR_MODE_HALL
-} mc_foc_sensor_mode;
-
-typedef enum {
-	MOTOR_TYPE_BLDC = 0,
-	MOTOR_TYPE_DC,
-	MOTOR_TYPE_FOC
-} mc_motor_type;
-
-typedef enum {
 	FAULT_CODE_NONE = 0,
 	FAULT_CODE_OVER_VOLTAGE,
 	FAULT_CODE_UNDER_VOLTAGE,
@@ -113,10 +84,6 @@ typedef struct {
 
 typedef struct {
 	// Switching and drive
-	mc_pwm_mode pwm_mode;
-	mc_comm_mode comm_mode;
-	mc_motor_type motor_type;
-	mc_sensor_mode sensor_mode;
 	// Limits
 	float l_current_max;
 	float l_current_min;
@@ -176,7 +143,6 @@ typedef struct {
 	float foc_sl_openloop_time;
 	float foc_sl_d_current_duty;
 	float foc_sl_d_current_factor;
-	mc_foc_sensor_mode foc_sensor_mode;
 	uint8_t foc_hall_table[8];
 	float foc_sl_erpm;
 	// Speed PID

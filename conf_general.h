@@ -130,9 +130,5 @@ void conf_general_read_app_configuration(app_configuration *conf);
 bool conf_general_store_app_configuration(app_configuration *conf);
 void conf_general_read_mc_configuration(mc_configuration *conf);
 bool conf_general_store_mc_configuration(mc_configuration *conf);
-bool conf_general_detect_motor_param(float current, float min_rpm, float low_duty,
-		float *int_limit, float *bemf_coupling_k, int8_t *hall_table, int *hall_res);
-bool conf_general_measure_flux_linkage(float current, float duty,
-		float min_erpm, float res, float *linkage);
 
 #endif /* CONF_GENERAL_H_ */

@@ -1,0 +1,14 @@
+#ifndef __I2C_MSGS_H__
+#define __I2C_MSGS_H__
+
+#define VESC_FEEDBACK 0x01
+#define VESC_STATUS 0x02
+#define VESC_CONTROL_SPEED 0x03
+#define VESC_CONTROL_ROTOR 0x04
+#define VESC_CONTROL_CURRENT 0x05
+#define VESC_CONTROL_POSITION 0x06
+#define VESC_CONTROL_DUTY 0x07
+
+#define I2C_ADDR_GEN_CALL 0x00
+
+#endif

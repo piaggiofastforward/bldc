@@ -125,26 +125,16 @@ CSRC = $(STARTUPSRC) \
        $(CHIBIOS)/os/hal/lib/streams/chprintf.c \
        $(CHIBIOS)/os/various/syscalls.c \
        main.c \
-       comm_usb_serial.c \
        irq_handlers.c \
        buffer.c \
-       comm_usb.c \
        crc.c \
        digital_filter.c \
        ledpwm.c \
-       mcpwm.c \
-       servo_dec.c \
        utils.c \
-       servo.c \
-       servo_simple.c \
        packet.c \
-       terminal.c \
        conf_general.c \
        eeprom.c \
-       commands.c \
        timeout.c \
-       comm_can.c \
-       ws2811.c \
        led_external.c \
        encoder.c \
        flash_helper.c \

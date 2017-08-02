@@ -8,7 +8,6 @@
 #include "conf_general.h"
 #include "ch.h"
 #include "eeprom.h"
-#include "mcpwm.h"
 #include "mc_interface.h"
 #include "hw.h"
 #include "utils.h"
@@ -139,10 +138,6 @@ void conf_general_get_default_app_configuration(app_configuration *conf) {
  */
 void conf_general_get_default_mc_configuration(mc_configuration *conf) {
 	memset(conf, 0, sizeof(mc_configuration));
-	conf->pwm_mode = MCCONF_PWM_MODE;
-	conf->comm_mode = MCCONF_COMM_MODE;
-	conf->motor_type = MCCONF_DEFAULT_MOTOR_TYPE;
-	conf->sensor_mode = MCCONF_SENSOR_MODE;
 
 	conf->l_current_max = MCCONF_L_CURRENT_MAX;
 	conf->l_current_min = MCCONF_L_CURRENT_MIN;
@@ -196,7 +191,6 @@ void conf_general_get_default_mc_configuration(mc_configuration *conf) {
 	conf->foc_encoder_inverted = MCCONF_FOC_ENCODER_INVERTED;
 	conf->foc_encoder_offset = MCCONF_FOC_ENCODER_OFFSET;
 	conf->foc_encoder_ratio = MCCONF_FOC_ENCODER_RATIO;
-	conf->foc_sensor_mode = MCCONF_FOC_SENSOR_MODE;
 	conf->foc_pll_kp = MCCONF_FOC_PLL_KP;
 	conf->foc_pll_ki = MCCONF_FOC_PLL_KI;
 	conf->foc_motor_l = MCCONF_FOC_MOTOR_L;
@@ -368,207 +362,3 @@ bool conf_general_store_mc_configuration(mc_configuration *conf) {
 	return is_ok;
 }
 
-bool conf_general_detect_motor_param(float current, float min_rpm, float low_duty,
-		float *int_limit, float *bemf_coupling_k, int8_t *hall_table, int *hall_res) {
-
-	int ok_steps = 0;
-	const float spinup_to_duty = 0.6;
-
-	mcconf = *mc_interface_get_configuration();
-	mcconf_old = mcconf;
-
-	mcconf.motor_type = MOTOR_TYPE_BLDC;
-	mcconf.sensor_mode = SENSOR_MODE_SENSORLESS;
-	mcconf.comm_mode = COMM_MODE_DELAY;
-	mcconf.sl_phase_advance_at_br = 1.0;
-	mcconf.sl_min_erpm = min_rpm;
-	mc_interface_set_configuration(&mcconf);
-
-	mc_interface_lock();
-
-	mc_interface_lock_override_once();
-	mc_interface_set_current(current);
-
-	// Spin up the motor
-	for (int i = 0;i < 5000;i++) {
-		if (mc_interface_get_duty_cycle_now() < spinup_to_duty) {
-			chThdSleepMilliseconds(1);
-		} else {
-			ok_steps++;
-			break;
-		}
-	}
-
-	// Reset hall sensor samples
-	mcpwm_reset_hall_detect_table();
-
-	// Run for a while to get hall sensor samples
-	mc_interface_lock_override_once();
-	mc_interface_set_duty(spinup_to_duty);
-	chThdSleepMilliseconds(400);
-
-	// Release the motor and wait a few commutations
-	mc_interface_lock_override_once();
-	mc_interface_set_current(0.0);
-	int tacho = mcpwm_get_tachometer_value(0);
-	for (int i = 0;i < 2000;i++) {
-		if ((mcpwm_get_tachometer_value(0) - tacho) < 3) {
-			chThdSleepMilliseconds(1);
-		} else {
-			ok_steps++;
-			break;
-		}
-	}
-
-	// Average the cycle integrator for 50 commutations
-	mcpwm_read_reset_avg_cycle_integrator();
-	tacho = mcpwm_get_tachometer_value(0);
-	for (int i = 0;i < 3000;i++) {
-		if ((mcpwm_get_tachometer_value(0) - tacho) < 50) {
-			chThdSleepMilliseconds(1);
-		} else {
-			ok_steps++;
-			break;
-		}
-	}
-
-	// Get hall detect result
-	*hall_res = mcpwm_get_hall_detect_result(hall_table);
-
-	*int_limit = mcpwm_read_reset_avg_cycle_integrator();
-
-	// Wait for the motor to slow down
-	for (int i = 0;i < 5000;i++) {
-		if (mc_interface_get_duty_cycle_now() > low_duty) {
-			chThdSleepMilliseconds(1);
-		} else {
-			ok_steps++;
-			break;
-		}
-	}
-
-	mc_interface_lock_override_once();
-	mc_interface_set_duty(low_duty);
-
-	// Average the cycle integrator for 100 commutations
-	mcpwm_read_reset_avg_cycle_integrator();
-	tacho = mcpwm_get_tachometer_value(0);
-	float rpm_sum = 0.0;
-	float rpm_iterations = 0.0;
-	for (int i = 0;i < 3000;i++) {
-		if ((mcpwm_get_tachometer_value(0) - tacho) < 100) {
-			rpm_sum += mc_interface_get_rpm();
-			rpm_iterations += 1;
-			chThdSleepMilliseconds(1);
-		} else {
-			ok_steps++;
-			break;
-		}
-	}
-
-	float avg_cycle_integrator_running = mcpwm_read_reset_avg_cycle_integrator();
-	float rpm = rpm_sum / rpm_iterations;
-
-	mc_interface_lock_override_once();
-	mc_interface_release_motor();
-
-	// Try to figure out the coupling factor
-	avg_cycle_integrator_running -= *int_limit;
-	avg_cycle_integrator_running /= (float)ADC_Value[ADC_IND_VIN_SENS];
-	avg_cycle_integrator_running *= rpm;
-	*bemf_coupling_k = avg_cycle_integrator_running;
-
-	// Restore settings
-	mc_interface_set_configuration(&mcconf_old);
-
-	mc_interface_unlock();
-
-	return ok_steps == 5 ? true : false;
-}
-
-/**
- * Try to measure the motor flux linkage.
- *
- * @param current
- * The current so spin up the motor with.
- *
- * @param duty
- * The duty cycle to maintain.
- *
- * @param min_erpm
- * The minimum ERPM for the delay commutation mode.
- *
- * @param res
- * The motor phase resistance.
- *
- * @param linkage
- * The calculated flux linkage.
- *
- * @return
- * True for success, false otherwise.
- */
-bool conf_general_measure_flux_linkage(float current, float duty,
-		float min_erpm, float res, float *linkage) {
-	mcconf = *mc_interface_get_configuration();
-	mcconf_old = mcconf;
-
-	mcconf.motor_type = MOTOR_TYPE_BLDC;
-	mcconf.sensor_mode = SENSOR_MODE_SENSORLESS;
-	mcconf.comm_mode = COMM_MODE_DELAY;
-	mcconf.sl_phase_advance_at_br = 1.0;
-	mcconf.sl_min_erpm = min_erpm;
-	mc_interface_set_configuration(&mcconf);
-
-	chThdSleepMilliseconds(1000);
-
-	// Disable timeout
-	systime_t tout = timeout_get_timeout_msec();
-	float tout_c = timeout_get_brake_current();
-	timeout_configure(60000, 0.0);
-
-	mc_interface_lock();
-
-	mc_interface_lock_override_once();
-	mc_interface_set_current(current);
-
-	int cnt = 0;
-	while (mc_interface_get_duty_cycle_now() < duty) {
-		chThdSleepMilliseconds(1);
-		cnt++;
-		if (cnt >= 5000) {
-			mc_interface_set_current(0.0);
-			timeout_configure(tout, tout_c);
-			mc_interface_set_configuration(&mcconf_old);
-			mc_interface_unlock();
-			return false;
-		}
-	}
-
-	mc_interface_lock_override_once();
-	mc_interface_set_duty(duty);
-
-	float avg_voltage = 0.0;
-	float avg_rpm = 0.0;
-	float avg_current = 0.0;
-	float samples = 0.0;
-	for (int i = 0;i < 2000;i++) {
-		avg_voltage += GET_INPUT_VOLTAGE() * mc_interface_get_duty_cycle_now();
-		avg_rpm += mc_interface_get_rpm();
-		avg_current += mc_interface_get_tot_current();
-		samples += 1.0;
-		chThdSleepMilliseconds(1.0);
-	}
-
-	mc_interface_set_configuration(&mcconf_old);
-	mc_interface_unlock();
-	mc_interface_set_current(0.0);
-
-	avg_voltage /= samples;
-	avg_rpm /= samples;
-	avg_current /= samples;
-	avg_voltage -= avg_current * res * 2.0;
-
-	*linkage = avg_voltage * 60.0 / (sqrtf(3.0) * 2.0 * M_PI * avg_rpm);
-
-	return true;
-}
