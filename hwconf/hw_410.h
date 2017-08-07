@@ -110,13 +110,13 @@
 // Number of servo outputs
 #define HW_SERVO_NUM		2
 
-// UART Peripheral
-#define HW_UART_DEV			UARTD6
-#define HW_UART_GPIO_AF		GPIO_AF_USART6
-#define HW_UART_TX_PORT		GPIOC
-#define HW_UART_TX_PIN		6
-#define HW_UART_RX_PORT		GPIOC
-#define HW_UART_RX_PIN		7
+// // UART Peripheral
+// #define HW_UART_DEV			UARTD6
+// #define HW_UART_GPIO_AF		GPIO_AF_USART6
+// #define HW_UART_TX_PORT		GPIOC
+// #define HW_UART_TX_PIN		6
+// #define HW_UART_RX_PORT		GPIOC
+// #define HW_UART_RX_PIN		7
 
 // ICU Peripheral for servo decoding
 #define HW_ICU_DEV			ICUD3
@@ -161,17 +161,17 @@
 #define NRF_PORT_MISO			GPIOA
 #define NRF_PIN_MISO			6
 
-// SPI pins
-#define HW_SPI_DEV				SPID1
-#define HW_SPI_GPIO_AF			GPIO_AF_SPI1
-#define HW_SPI_PORT_NSS			GPIOA
-#define HW_SPI_PIN_NSS			4
-#define HW_SPI_PORT_SCK			GPIOA
-#define HW_SPI_PIN_SCK			5
-#define HW_SPI_PORT_MOSI		GPIOA
-#define HW_SPI_PIN_MOSI			7
-#define HW_SPI_PORT_MISO		GPIOA
-#define HW_SPI_PIN_MISO			6
+// // SPI pins
+// #define HW_SPI_DEV				SPID1
+// #define HW_SPI_GPIO_AF			GPIO_AF_SPI1
+// #define HW_SPI_PORT_NSS			GPIOA
+// #define HW_SPI_PIN_NSS			4
+// #define HW_SPI_PORT_SCK			GPIOA
+// #define HW_SPI_PIN_SCK			5
+// #define HW_SPI_PORT_MOSI		GPIOA
+// #define HW_SPI_PIN_MOSI			7
+// #define HW_SPI_PORT_MISO		GPIOA
+// #define HW_SPI_PIN_MISO			6
 
 // Measurement macros
 #define ADC_V_L1				ADC_Value[ADC_IND_SENS1]
