@@ -102,7 +102,7 @@ static volatile mc_sample_t m_samples;
 static volatile int m_tachometer;
 static volatile int m_tachometer_abs;
 static volatile float last_inj_adc_isr_duration;
-static volatile float m_pos_pid_now;
+static volatile int m_pos_pid_now;
 
 // Private functions
 static void do_dc_cal(void);
@@ -113,12 +113,12 @@ static void pll_run(float phase, float dt, volatile float *phase_var,
 static void control_current(volatile motor_state_t *state_m, float dt);
 static void svm(float alpha, float beta, uint32_t PWMHalfPeriod,
 		uint32_t* tAout, uint32_t* tBout, uint32_t* tCout);
-static void run_pid_control_pos(float angle_now, float angle_set, float dt);
+static void run_pid_control_pos(int tacho_now, int tacho_set, float dt);
 static void run_pid_control_speed(float dt);
 static void stop_pwm_hw(void);
 static void start_pwm_hw(void);
 static int read_hall(void);
-static float correct_encoder(float obs_angle, float enc_angle, float speed);
+/* static float correct_encoder(float obs_angle, float enc_angle, float speed); */
 static float correct_hall(float angle, float speed, float dt);
 
 // Threads
@@ -530,7 +530,7 @@ void mcpwm_foc_set_pid_speed(float rpm) {
  * @param pos
  * The desired position of the motor in degrees.
  */
-void mcpwm_foc_set_pid_pos(float pos) {
+void mcpwm_foc_set_pid_pos(int pos) {
 	m_control_mode = CONTROL_MODE_POS;
 	m_pos_pid_set = pos;
 
@@ -598,12 +598,12 @@ float mcpwm_foc_get_duty_cycle_now(void) {
 	return m_motor_state.duty_now;
 }
 
-float mcpwm_foc_get_pid_pos_set(void) {
+int mcpwm_foc_get_pid_pos_set(void) {
 	return m_pos_pid_set;
 }
 
-float mcpwm_foc_get_pid_pos_now(void) {
-	return m_pos_pid_now;
+int mcpwm_foc_get_pid_pos_now(void) {
+	return m_tachometer;
 }
 
 /**
@@ -816,7 +816,7 @@ float mcpwm_foc_get_vq(void) {
  * @param direction
  * The detected direction.
  */
-void mcpwm_foc_encoder_detect(float current, bool print, float *offset, float *ratio, bool *inverted) {
+void mcpwm_foc_encoder_detect(float current, float *offset, float *ratio, bool *inverted) {
 	mc_interface_lock();
 
 	m_phase_override = true;
@@ -854,18 +854,10 @@ void mcpwm_foc_encoder_detect(float current, bool print, float *offset, float *r
 		}
 	}
 
-	if (print) {
-		commands_printf("Index found");
-	}
-
 	// Rotate
 	for (float i = 0.0;i < 2.0 * M_PI;i += (2.0 * M_PI) / 500.0) {
 		m_phase_now_override = i;
 		chThdSleepMilliseconds(1);
-	}
-
-	if (print) {
-		commands_printf("Rotated for sync");
 	}
 
 	// Inverted and ratio
@@ -893,10 +885,6 @@ void mcpwm_foc_encoder_detect(float current, bool print, float *offset, float *r
 		s_sum += s;
 		c_sum += c;
 
-		if (print) {
-			commands_printf("%.2f", (double)(diff * 180.0 / M_PI));
-		}
-
 		if (i > 3 && fabsf(utils_angle_difference_rad(m_phase_now_encoder, first)) < fabsf(diff / 2.0)) {
 			break;
 		}
@@ -921,10 +909,6 @@ void mcpwm_foc_encoder_detect(float current, bool print, float *offset, float *r
 		s_sum += s;
 		c_sum += c;
 
-		if (print) {
-			commands_printf("%.2f", (double)(diff * 180.0 / M_PI));
-		}
-
 		if (i > 3 && fabsf(utils_angle_difference_rad(m_phase_now_encoder, first)) < fabsf(diff / 2.0)) {
 			break;
 		}
@@ -938,19 +922,10 @@ void mcpwm_foc_encoder_detect(float current, bool print, float *offset, float *r
 	m_conf->foc_encoder_inverted = *inverted;
 	m_conf->foc_encoder_ratio = *ratio;
 
-	if (print) {
-		commands_printf("Inversion and ratio detected");
-	}
-
 	// Rotate
 	for (float i = m_phase_now_override;i < 2.0 * M_PI;i += (2.0 * M_PI) / 500.0) {
 		m_phase_now_override = i;
 		chThdSleepMilliseconds(2);
-	}
-
-	if (print) {
-		commands_printf("Rotated for sync");
-		commands_printf("Enc: %.2f", (double)encoder_read_deg());
 	}
 
 	const int it_ofs = m_conf->foc_encoder_ratio * 3.0;
@@ -967,9 +942,6 @@ void mcpwm_foc_encoder_detect(float current, bool print, float *offset, float *r
 		s_sum += s;
 		c_sum += c;
 
-		if (print) {
-			commands_printf("%.2f", (double)(diff * 180.0 / M_PI));
-		}
 	}
 
 	for (int i = it_ofs;i > 0;i--) {
@@ -981,23 +953,11 @@ void mcpwm_foc_encoder_detect(float current, bool print, float *offset, float *r
 		sincosf(diff, &s, &c);
 		s_sum += s;
 		c_sum += c;
-
-		if (print) {
-			commands_printf("%.2f", (double)(diff * 180.0 / M_PI));
-		}
 	}
 
 	*offset = atan2f(s_sum, c_sum) * 180.0 / M_PI;
 
-	if (print) {
-		commands_printf("Avg: %.2f", (double)*offset);
-	}
-
 	utils_norm_angle(offset);
-
-	if (print) {
-		commands_printf("Offset detected");
-	}
 
 	m_id_set = 0.0;
 	m_iq_set = 0.0;
@@ -1308,24 +1268,25 @@ bool mcpwm_foc_hall_detect(float current, uint8_t *hall_table) {
 }
 
 void mcpwm_foc_print_state(void) {
-	commands_printf("Mod d:        %.2f", (double)m_motor_state.mod_d);
-	commands_printf("Mod q:        %.2f", (double)m_motor_state.mod_q);
-	commands_printf("Duty:         %.2f", (double)m_motor_state.duty_now);
-	commands_printf("Vd:           %.2f", (double)m_motor_state.vd);
-	commands_printf("Vq:           %.2f", (double)m_motor_state.vq);
-	commands_printf("Phase:        %.2f", (double)m_motor_state.phase);
-	commands_printf("V_alpha:      %.2f", (double)m_motor_state.v_alpha);
-	commands_printf("V_beta:       %.2f", (double)m_motor_state.v_beta);
-	commands_printf("id:           %.2f", (double)m_motor_state.id);
-	commands_printf("iq:           %.2f", (double)m_motor_state.iq);
-	commands_printf("id_filter:    %.2f", (double)m_motor_state.id_filter);
-	commands_printf("iq_filter:    %.2f", (double)m_motor_state.iq_filter);
-	commands_printf("id_target:    %.2f", (double)m_motor_state.id_target);
-	commands_printf("iq_target:    %.2f", (double)m_motor_state.iq_target);
-	commands_printf("i_abs:        %.2f", (double)m_motor_state.i_abs);
-	commands_printf("i_abs_filter: %.2f", (double)m_motor_state.i_abs_filter);
-	commands_printf("Obs_x1:       %.2f", (double)m_observer_x1);
-	commands_printf("Obs_x2:       %.2f", (double)m_observer_x2);
+  return;
+	/* commands_printf("Mod d:        %.2f", (double)m_motor_state.mod_d); */
+	/* commands_printf("Mod q:        %.2f", (double)m_motor_state.mod_q); */
+	/* commands_printf("Duty:         %.2f", (double)m_motor_state.duty_now); */
+	/* commands_printf("Vd:           %.2f", (double)m_motor_state.vd); */
+	/* commands_printf("Vq:           %.2f", (double)m_motor_state.vq); */
+	/* commands_printf("Phase:        %.2f", (double)m_motor_state.phase); */
+	/* commands_printf("V_alpha:      %.2f", (double)m_motor_state.v_alpha); */
+	/* commands_printf("V_beta:       %.2f", (double)m_motor_state.v_beta); */
+	/* commands_printf("id:           %.2f", (double)m_motor_state.id); */
+	/* commands_printf("iq:           %.2f", (double)m_motor_state.iq); */
+	/* commands_printf("id_filter:    %.2f", (double)m_motor_state.id_filter); */
+	/* commands_printf("iq_filter:    %.2f", (double)m_motor_state.iq_filter); */
+	/* commands_printf("id_target:    %.2f", (double)m_motor_state.id_target); */
+	/* commands_printf("iq_target:    %.2f", (double)m_motor_state.iq_target); */
+	/* commands_printf("i_abs:        %.2f", (double)m_motor_state.i_abs); */
+	/* commands_printf("i_abs_filter: %.2f", (double)m_motor_state.i_abs_filter); */
+	/* commands_printf("Obs_x1:       %.2f", (double)m_observer_x1); */
+	/* commands_printf("Obs_x2:       %.2f", (double)m_observer_x2); */
 }
 
 float mcpwm_foc_get_last_inj_adc_isr_duration(void) {
@@ -1599,26 +1560,16 @@ void mcpwm_foc_adc_inj_int_handler(void) {
 
 	// Track position control angle
 	// TODO: Have another look at this.
-	float angle_now = 0.0;
-	if (encoder_is_configured()) {
-		angle_now = enc_ang;
-	} else {
-		angle_now = m_motor_state.phase * (180.0 / M_PI);
-	}
-
-	if (m_conf->p_pid_ang_div > 0.98 && m_conf->p_pid_ang_div < 1.02) {
-		m_pos_pid_now = angle_now;
-	} else {
-		static float angle_last = 0.0;
-		float diff_f = utils_angle_difference(angle_now, angle_last);
-		angle_last = angle_now;
-		m_pos_pid_now += diff_f / m_conf->p_pid_ang_div;
-		utils_norm_angle((float*)&m_pos_pid_now);
-	}
+	/* float angle_now = 0.0; */
+	/* if (encoder_is_configured()) { */
+	/* 	angle_now = enc_ang; */
+	/* } else { */
+	/* 	angle_now = m_motor_state.phase * (180.0 / M_PI); */
+	/* } */
 
 	// Run position control
 	if (m_state == MC_STATE_RUNNING) {
-		run_pid_control_pos(m_pos_pid_now, m_pos_pid_set, dt);
+		run_pid_control_pos(m_tachometer, m_pos_pid_set, dt);
 	}
 
 	// MCIF handler
@@ -1991,7 +1942,7 @@ static void svm(float alpha, float beta, uint32_t PWMHalfPeriod,
 	*tCout = tC;
 }
 
-static void run_pid_control_pos(float angle_now, float angle_set, float dt) {
+static void run_pid_control_pos(int tacho_now, int tacho_set, float dt) {
 	static float i_term = 0;
 	static float prev_error = 0;
 	float p_term;
@@ -2005,7 +1956,7 @@ static void run_pid_control_pos(float angle_now, float angle_set, float dt) {
 	}
 
 	// Compute parameters
-	float error = utils_angle_difference(angle_set, angle_now);
+	float error = tacho_set - tacho_now;
 
 	if (encoder_is_configured()) {
 		if (m_conf->foc_encoder_inverted) {
@@ -2020,35 +1971,35 @@ static void run_pid_control_pos(float angle_now, float angle_set, float dt) {
 	// happens at low speed when the position resolution is low and several
 	// control iterations run without position updates.
 	// TODO: Are there problems with this approach?
-	static float dt_int = 0.0;
-	dt_int += dt;
-	if (error == prev_error) {
-		d_term = 0.0;
-	} else {
-		d_term = (error - prev_error) * (m_conf->p_pid_kd / dt_int);
-		dt_int = 0.0;
-	}
+	/* static float dt_int = 0.0; */
+	/* dt_int += dt; */
+	/* if (error == prev_error) { */
+	/* 	d_term = 0.0; */
+	/* } else { */
+		d_term = (error - prev_error) * (m_conf->p_pid_kd / dt);
+	/* 	dt_int = 0.0; */
+	/* } */
 
 	// I-term wind-up protection
-	utils_truncate_number(&i_term, -1.0, 1.0);
+	utils_truncate_number(&i_term, -2000, 2000);
 
 	// Store previous error
 	prev_error = error;
 
 	// Calculate output
 	float output = p_term + i_term + d_term;
-	utils_truncate_number(&output, -1.0, 1.0);
+	/* utils_truncate_number(&output, -1.0, 1.0); */
 
-	if (encoder_is_configured()) {
-		if (encoder_index_found()) {
-			m_iq_set = output * m_conf->lo_current_max;
-		} else {
-			// Rotate the motor with 40 % power until the encoder index is found.
-			m_iq_set = 0.4 * m_conf->lo_current_max;
-		}
-	} else {
+	/* if (encoder_is_configured()) { */
+	/* 	if (encoder_index_found()) { */
+	/* 		m_iq_set = output * m_conf->lo_current_max; */
+	/* 	} else { */
+	/* 		// Rotate the motor with 40 % power until the encoder index is found. */
+	/* 		m_iq_set = 0.4 * m_conf->lo_current_max; */
+	/* 	} */
+	/* } else { */
 		m_iq_set = output * m_conf->lo_current_max;
-	}
+	/* } */
 }
 
 static void run_pid_control_speed(float dt) {
@@ -2135,24 +2086,24 @@ static int read_hall(void) {
 	return READ_HALL1() | (READ_HALL2() << 1) | (READ_HALL3() << 2);
 }
 
-static float correct_encoder(float obs_angle, float enc_angle, float speed) {
-	float rpm_abs = fabsf(speed / ((2.0 * M_PI) / 60.0));
-	static bool using_encoder = true;
-
-	// Hysteresis 5 % of total speed
-	float hyst = m_conf->foc_sl_erpm * 0.05;
-	if (using_encoder) {
-		if (rpm_abs > (m_conf->foc_sl_erpm + hyst)) {
-			using_encoder = false;
-		}
-	} else {
-		if (rpm_abs < (m_conf->foc_sl_erpm - hyst)) {
-			using_encoder = true;
-		}
-	}
-
-	return using_encoder ? enc_angle : obs_angle;
-}
+/* static float correct_encoder(float obs_angle, float enc_angle, float speed) { */
+/* 	float rpm_abs = fabsf(speed / ((2.0 * M_PI) / 60.0)); */
+/* 	static bool using_encoder = true; */
+/*  */
+/* 	// Hysteresis 5 % of total speed */
+/* 	float hyst = m_conf->foc_sl_erpm * 0.05; */
+/* 	if (using_encoder) { */
+/* 		if (rpm_abs > (m_conf->foc_sl_erpm + hyst)) { */
+/* 			using_encoder = false; */
+/* 		} */
+/* 	} else { */
+/* 		if (rpm_abs < (m_conf->foc_sl_erpm - hyst)) { */
+/* 			using_encoder = true; */
+/* 		} */
+/* 	} */
+/*  */
+/* 	return using_encoder ? enc_angle : obs_angle; */
+/* } */
 
 static float correct_hall(float angle, float speed, float dt) {
 	static int ang_hall_int_prev = -1;
