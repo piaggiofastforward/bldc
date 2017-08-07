@@ -25,60 +25,13 @@
 #include "ch.h"
 #include "hal.h"
 #include "hw.h"
-#include "nrf_driver.h"
-#include "rfhelp.h"
 
 // Private variables
 static app_configuration appconf;
 
 void app_init(app_configuration *conf) {
 	app_set_configuration(conf);
-
-	switch (appconf.app_to_use) {
-	case APP_PPM:
-		app_ppm_start();
-		break;
-
-	case APP_ADC:
-		app_adc_start(true);
-		break;
-
-	case APP_UART:
-		hw_stop_i2c();
-		app_uartcomm_start();
-		break;
-
-	case APP_PPM_UART:
-		hw_stop_i2c();
-		app_ppm_start();
-		app_uartcomm_start();
-		break;
-
-	case APP_ADC_UART:
-		hw_stop_i2c();
-		app_adc_start(false);
-		app_uartcomm_start();
-		break;
-
-	case APP_NUNCHUK:
-		app_nunchuk_start();
-		break;
-
-	case APP_NRF:
-		nrf_driver_init();
-		rfhelp_restart();
-		break;
-
-	case APP_CUSTOM:
-#ifdef USE_APP_STEN
-		hw_stop_i2c();
-		app_sten_init();
-#endif
-		break;
-
-	default:
-		break;
-	}
+  app_i2cslave_init();
 }
 
 const app_configuration* app_get_configuration(void) {
@@ -94,9 +47,5 @@ const app_configuration* app_get_configuration(void) {
  */
 void app_set_configuration(app_configuration *conf) {
 	appconf = *conf;
-	app_ppm_configure(&appconf.app_ppm_conf);
-	app_adc_configure(&appconf.app_adc_conf);
-	app_uartcomm_configure(appconf.app_uart_baudrate);
-	app_nunchuk_configure(&appconf.app_chuk_conf);
-	rfhelp_update_conf(&appconf.app_nrf_conf);
+	app_i2cslave_configure(appconf.controller_id);
 }
