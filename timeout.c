@@ -50,7 +50,7 @@ void timeout_configure(systime_t timeout, float brake_current) {
 }
 
 void timeout_reset(void) {
-	last_update_time = chVTGetSystemTime();
+	last_update_time = chVTGetSystemTimeX();
 }
 
 bool timeout_has_timeout(void) {
