@@ -7,6 +7,7 @@
  * least once per second to reset the watchdog timer.  Set the I2C address for the
  * controller using the controller ID field in the BLDC tool
  */
+
 /* MESSAGES 
  * To read feedback: 
  *   Read from the I2C Address 
@@ -31,11 +32,13 @@
 #include "ch.h" // ChibiOS
 #include "hal.h" // ChibiOS HAL
 #include "mc_interface.h" // Motor control functions
-#include "mcpwm.h" // Motor control functions
+#include "mcpwm_foc.h" // Motor control functions
 #include "hw.h" // HW Pin Mapping
 #include "timeout.h" // Reset MC Timeout
 #include "i2cslave.h"
 #include "i2c_lld.h"
+#include "ext_lld.h"
+#include "pal.h"
 #include "applications/i2c_control_msgs.h"
 
 // Function prototypes
@@ -56,14 +59,13 @@ static THD_WORKING_AREA(i2cslave_thread_wa, 2048);
 
 // Feedback struct to store feedback info between requests
 typedef struct {
-  /* uint32_t motor_current; */
-  /* uint32_t commanded_velocity; */
-  /* uint32_t measured_velocity; */
-  /* uint32_t measured_position; */
-  /* uint32_t supply_voltage; */
-  /* uint32_t supply_current; */
-  uint32_t hall;
-  uint32_t comm_step;
+  int32_t motor_current;
+  int32_t commanded_velocity;
+  int32_t measured_velocity;
+  int32_t measured_position;
+  int32_t supply_voltage;
+  int32_t supply_current;
+  uint32_t switch_flags;
 } mc_feedback;
 
 typedef union {
@@ -81,16 +83,24 @@ union {
   uint8_t request_bytes[sizeof(mc_command)];
 } request;
 
+typedef struct {
+  int32_t fault_code;
+  int32_t temp;
+} mc_status;
+
+typedef union {
+  mc_status status;
+  uint8_t status_bytes[sizeof(mc_status)];
+} mc_status_union;
+
 static volatile mc_command command_now = {0, 0};
 
 static mc_feedback_union fb;
+static mc_status_union status;
 static volatile bool needFeeback = false;
 static volatile bool gotCommand = false;
 static I2CDriver *i2cp_g = NULL;
 static i2caddr_t mc_i2c_addr = 0x00; // default I2C Address, by design will crash the app
-
-// Buffers for I2C comms
-static uint8_t statusBody[16];
 
 // Handler for write messages sent to motor controller
 static const I2CSlaveMsg requestRx = {
@@ -113,7 +123,7 @@ static I2CSlaveMsg feedbackReply = {  // this is in RAM so size may be updated
 // Response after VESC_STATUS is written
 static I2CSlaveMsg statusReply = {  // this is in RAM so size may be updated
   0,                         // Zero so clock will stretch until response is ready 
-  statusBody,                // Status buffer
+  status.status_bytes,                // Status buffer
   updateStatus,              // Create status message
   statusReplyDone,           // Reset to default feedback reply
   catchError                 // Error hook
@@ -174,28 +184,21 @@ void requestProcessor(I2CDriver *i2cp)
  */
 void setCommand()
 {
-  int error;
+  /* int error; */
+  /* static int error_integral = 0; */
   switch (command_now.type) {
+    fb.feedback.commanded_velocity = command_now.value;
     case VESC_CONTROL_SPEED:
       mc_interface_set_pid_speed(command_now.value);
-      /* fb.feedback.commanded_velocity = command_now.value; */
-      break;
-    case VESC_CONTROL_ROTOR:
-      mc_interface_set_pid_pos(command_now.value);
-      /* fb.feedback.commanded_velocity = 0; */
       break;
     case VESC_CONTROL_CURRENT:
-      mc_interface_set_current(command_now.value);
-      /* fb.feedback.commanded_velocity = 0; */
+      mc_interface_set_current(command_now.value / 1000);
       break;
     case VESC_CONTROL_DUTY:
-      mc_interface_set_duty(command_now.value);
-      /* fb.feedback.commanded_velocity = 0; */
+      mc_interface_set_duty(command_now.value / 1000);
       break;
     case VESC_CONTROL_POSITION:
-      error = command_now.value - mc_interface_get_tachometer_value(false);
-      mc_interface_set_duty(.004 * error);
-      /* fb.feedback.commanded_velocity = 0; */
+      mc_interface_set_pid_pos(command_now.value);
       break;
     default:
       break;
@@ -220,10 +223,9 @@ void createFeedbackReply(I2CDriver *i2cp)
  */
 void updateStatus(I2CDriver *i2cp)
 {
-  const uint8_t fault_code = mc_interface_get_fault();
-  const float temp = NTC_TEMP(ADC_IND_TEMP_MOS2);
-  int size = snprintf((char *) statusBody, sizeof(statusBody), "%d:%.3f", fault_code, (double) temp);
-  statusReply.size = size;
+  status.status.fault_code = mc_interface_get_fault();
+  status.status.temp = NTC_TEMP(ADC_IND_TEMP_MOS2);
+  statusReply.size = sizeof(mc_status);
   i2cSlaveReplyI(i2cp, &statusReply);
 }
 
@@ -252,19 +254,95 @@ void statusReplyDone(I2CDriver *i2cp)
   i2cSlaveReplyI(i2cp, &feedbackReply);
 }
 
+
+static bool estop;
+static bool rev_limit;
+static bool fwd_limit;
 /*
  * Updates the feedback struct with current data
- */
-void updateFeedback()
+ */ void updateFeedback()
 {
-  /* fb.feedback.motor_current = mc_interface_get_tot_current() * 1000; */
-  /* fb.feedback.measured_velocity = mc_interface_get_rpm(); */
-  /* fb.feedback.measured_position = mc_interface_get_tachometer_value(false); */
-  /* fb.feedback.supply_voltage  = GET_INPUT_VOLTAGE() * 1000; */
-  /* fb.feedback.supply_current = mc_interface_get_tot_current_in() * 1000; */
-  fb.feedback.hall = read_hall();
-  fb.feedback.comm_step = mcpwm_get_comm_step();
+  fb.feedback.motor_current = mc_interface_get_tot_current() * 1000;
+  fb.feedback.measured_velocity = mc_interface_get_rpm();
+  fb.feedback.measured_position = mc_interface_get_tachometer_value(false);
+  fb.feedback.supply_voltage  = GET_INPUT_VOLTAGE() * 1000;
+  fb.feedback.supply_current = mc_interface_get_tot_current_in() * 1000;
+  fb.feedback.switch_flags = (estop << 2) | (rev_limit << 1) | (fwd_limit);
 }
+
+/* int32_t min_tacho = INT_MAX; */
+/* int32_t max_tacho = INT_MIN; */
+/*  */
+/* void reset_homing(void) { */
+/*   min_tacho = INT_MAX; */
+/*   max_tacho = INT_MIN; */
+/* } */
+/*  */
+/* void homing_sequence(void) { */
+/*   if (max_tacho != ) */
+/*   if (!fwd_limit) { */
+/*     mc_interface_set_duty(.5); */
+/*   } else { */
+/*     max_tacho = mc_interface_get_tachometer_value(false); */
+/*   } */
+/*  */
+/*   while (!rev_limit) { */
+/*     mc_interface_set_duty(-.5); */
+/*   } */
+/*   min_tacho = mc_interface_get_tachometer_value(false); */
+/* } */
+/*  */
+
+
+void toggle_estop(EXTDriver *extp, expchannel_t channel) {
+  (void) extp;
+  (void) channel;
+  estop = palReadPad(GPIOA, 5) == PAL_LOW;
+  if (estop) {
+    mc_interface_set_brake_current(0);
+  }
+}
+
+void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel) {
+  (void) extp;
+  (void) channel;
+  fwd_limit = palReadPad(GPIOC, 0) == PAL_LOW;
+  if (fwd_limit && mc_interface_get_duty_cycle_now() > 0) {
+    mc_interface_brake_now();
+  }
+}
+
+void toggle_rev_limit(EXTDriver *extp, expchannel_t channel) {
+  (void) extp;
+  (void) channel;
+  rev_limit = palReadPad(GPIOA, 6) == PAL_HIGH;
+  if (rev_limit && mc_interface_get_duty_cycle_now() < 0) {
+    mc_interface_brake_now();
+  }
+}
+
+
+
+static const EXTConfig extcfg = {
+  {
+    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_fwd_limit},
+    {EXT_CH_MODE_DISABLED, NULL},    
+    {EXT_CH_MODE_DISABLED, NULL},    
+    {EXT_CH_MODE_DISABLED, NULL},   
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_estop},
+    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL}
+  }
+};
 
 /*
  * Initialization for the i2c slave control
@@ -273,6 +351,16 @@ void updateFeedback()
 void app_i2cslave_init() 
 {
   hw_start_i2c();
+
+  palSetPadMode(GPIOA, 5, PAL_MODE_INPUT);
+  palSetPadMode(GPIOA, 6, PAL_MODE_INPUT);
+  palSetPadMode(GPIOC, 0, PAL_MODE_INPUT_PULLUP);
+  extStart(&EXTD1, &extcfg);
+
+  estop = palReadPad(GPIOA, 5) == PAL_LOW;
+  rev_limit = palReadPad(GPIOC, 0) == PAL_LOW;
+  fwd_limit = palReadPad(GPIOA, 6) == PAL_HIGH;
+
 
   chThdCreateStatic(i2cslave_thread_wa, sizeof(i2cslave_thread_wa),
       NORMALPRIO, i2cslave_thread, NULL);
@@ -308,9 +396,19 @@ static THD_FUNCTION(i2cslave_thread, arg)
       }
     }
     
-    if (gotCommand) {
+    if (estop) {
+      mc_interface_set_brake_current(0);
+    } else if (gotCommand) {
       setCommand();
       gotCommand = false;
+    }
+
+    if (rev_limit && command_now.value < 0) {
+      mc_interface_brake_now();
+    }
+
+    if (fwd_limit && command_now.value > 0) {
+      mc_interface_brake_now();
     }
 
 
