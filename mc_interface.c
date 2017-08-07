@@ -241,7 +241,7 @@ void mc_interface_set_pid_speed(float rpm) {
   mcpwm_foc_set_pid_speed(rpm);
 }
 
-void mc_interface_set_pid_pos(float pos) {
+void mc_interface_set_pid_pos(int pos) {
 	if (mc_interface_try_input()) {
 		return;
 	}
@@ -420,11 +420,11 @@ float mc_interface_read_reset_avg_input_current(void) {
 	return res;
 }
 
-float mc_interface_get_pid_pos_set(void) {
+int mc_interface_get_pid_pos_set(void) {
 	return m_position_set;
 }
 
-float mc_interface_get_pid_pos_now(void) {
+int mc_interface_get_pid_pos_now(void) {
   return mcpwm_foc_get_pid_pos_now();
 }
 
@@ -461,15 +461,15 @@ int mc_interface_try_input(void) {
 	return retval;
 }
 
-void mc_interface_fault_stop(mc_fault_code fault) {
+void mc_interface_fault_stop(mc_fault_code fault, bool isr) {
 	if (mc_interface_dccal_done() && m_fault_now == FAULT_CODE_NONE) {
 		// Sent to terminal fault logger so that all faults and their conditions
 		// can be printed for debugging.
-		chSysLock();
+		isr ? chSysLockFromISR() : chSysLock();
 		volatile int val_samp = TIM8->CCR1;
 		volatile int current_samp = TIM1->CCR4;
 		volatile int tim_top = TIM1->ARR;
-		chSysUnlock();
+		isr ? chSysUnlockFromISR() : chSysUnlock();
 
 		fault_data fdata;
 		fdata.fault = fault;
@@ -506,7 +506,7 @@ void mc_interface_mc_timer_isr(void) {
 
 		if ((wrong_voltage_iterations >= 8)) {
 			mc_interface_fault_stop(input_voltage < m_conf.l_min_vin ?
-					FAULT_CODE_UNDER_VOLTAGE : FAULT_CODE_OVER_VOLTAGE);
+					FAULT_CODE_UNDER_VOLTAGE : FAULT_CODE_OVER_VOLTAGE, true);
 		}
 	} else {
 		wrong_voltage_iterations = 0;
@@ -535,11 +535,11 @@ void mc_interface_mc_timer_isr(void) {
 	// Current fault code
 	if (m_conf.l_slow_abs_current) {
 		if (fabsf(abs_current_filtered) > m_conf.l_abs_current_max) {
-			mc_interface_fault_stop(FAULT_CODE_ABS_OVER_CURRENT);
+			mc_interface_fault_stop(FAULT_CODE_ABS_OVER_CURRENT, true);
 		}
 	} else {
 		if (fabsf(abs_current) > m_conf.l_abs_current_max) {
-			mc_interface_fault_stop(FAULT_CODE_ABS_OVER_CURRENT);
+			mc_interface_fault_stop(FAULT_CODE_ABS_OVER_CURRENT, true);
 		}
 	}
 
@@ -591,7 +591,7 @@ static void update_override_limits(volatile mc_configuration *conf) {
 	} else if (temp > conf->l_temp_fet_end) {
 		conf->lo_current_min = 0.0;
 		conf->lo_current_max = 0.0;
-		mc_interface_fault_stop(FAULT_CODE_OVER_TEMP_FET);
+		mc_interface_fault_stop(FAULT_CODE_OVER_TEMP_FET, false);
 	} else {
 		float maxc = fabsf(conf->l_current_max);
 		if (fabsf(conf->l_current_min) > maxc) {
@@ -630,7 +630,7 @@ static THD_FUNCTION(timer_thread, arg) {
 	for(;;) {
 		// Check if the DRV8302 indicates any fault
 		if (IS_DRV_FAULT()) {
-			mc_interface_fault_stop(FAULT_CODE_DRV8302);
+			mc_interface_fault_stop(FAULT_CODE_DRV8302, true);
 		}
 
 		// Decrease fault iterations

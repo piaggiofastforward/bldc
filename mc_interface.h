@@ -41,7 +41,7 @@ mc_state mc_interface_get_state(void);
 void mc_interface_set_duty(float dutyCycle);
 void mc_interface_set_duty_noramp(float dutyCycle);
 void mc_interface_set_pid_speed(float rpm);
-void mc_interface_set_pid_pos(float pos);
+void mc_interface_set_pid_pos(int pos);
 void mc_interface_set_current(float current);
 void mc_interface_set_brake_current(float current);
 void mc_interface_brake_now(void);
@@ -65,13 +65,13 @@ int mc_interface_get_tachometer_abs_value(bool reset);
 float mc_interface_get_last_inj_adc_isr_duration(void);
 float mc_interface_read_reset_avg_motor_current(void);
 float mc_interface_read_reset_avg_input_current(void);
-float mc_interface_get_pid_pos_set(void);
-float mc_interface_get_pid_pos_now(void);
+int mc_interface_get_pid_pos_set(void);
+int mc_interface_get_pid_pos_now(void);
 float mc_interface_get_last_sample_adc_isr_duration(void);
 void mc_interface_sample_print_data(bool at_start, uint16_t len, uint8_t decimation);
 
 // MC implementation functions
-void mc_interface_fault_stop(mc_fault_code fault);
+void mc_interface_fault_stop(mc_fault_code fault, bool isr);
 int mc_interface_try_input(void);
 void mc_interface_mc_timer_isr(void);
 
