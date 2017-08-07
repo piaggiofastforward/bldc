@@ -1,4 +1,4 @@
 APPSRC =	applications/app.c \
-					application/i2c_slave.c
+					application/app_i2cslave.c
 
 APPINC = applications

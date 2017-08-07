@@ -1,3 +1,4 @@
+export PATH := ~/bin/oocd/bin:$(PATH)
 ##############################################################################
 # Build global options
 # NOTE: Can be overridden externally.
@@ -5,9 +6,14 @@
 
 # Compiler options here.
 ifeq ($(USE_OPT),)
-  USE_OPT = -O2 -ggdb -fomit-frame-pointer -falign-functions=16 -std=gnu99
+  USE_OPT = -O1 -g3 -fomit-frame-pointer -falign-functions=16 -std=gnu99
   USE_OPT += -DBOARD_OTG_NOVBUSSENS $(build_args)
   USE_OPT += -fsingle-precision-constant -Wdouble-promotion
+  USE_OPT += -fno-schedule-insns -fno-schedule-insns2
+
+	# # Backtrace support
+	# USE_OPT  += -fno-omit-frame-pointer -funwind-tables
+	# USE_OPT  += -mapcs -mno-sched-prolog
 endif
 
 # C specific options here (added to USE_OPT).
@@ -27,7 +33,7 @@ endif
 
 # Linker extra options here.
 ifeq ($(USE_LDOPT),)
-  USE_LDOPT = 
+  USE_LDOPT = #-mapcs -mno-sched-prolog
 endif
 
 # Enable this if you want link time optimizations (LTO)
@@ -108,7 +114,7 @@ include $(CHIBIOS)/os/rt/ports/ARMCMx/compilers/GCC/mk/port_v7m.mk
 #include $(CHIBIOS)/test/rt/test.mk
 include hwconf/hwconf.mk
 include applications/applications.mk
-include nrf/nrf.mk
+# include nrf/nrf.mk
 
 # Define linker script file here
 LDSCRIPT= ld_eeprom_emu.ld
@@ -127,19 +133,17 @@ CSRC = $(STARTUPSRC) \
        main.c \
        irq_handlers.c \
        buffer.c \
-       crc.c \
+			 crc.c \
        digital_filter.c \
        ledpwm.c \
+       mcpwm_foc.c \
        utils.c \
-       packet.c \
        conf_general.c \
        eeprom.c \
        timeout.c \
-       led_external.c \
        encoder.c \
        flash_helper.c \
        mc_interface.c \
-       mcpwm_foc.c \
        $(HWSRC) \
        $(APPSRC) \
        $(NRFSRC)
@@ -215,7 +219,7 @@ AOPT =
 TOPT = -mthumb -DTHUMB
 
 # Define C warning options here
-CWARN = -Wall -Wextra -Wundef -Wstrict-prototypes
+CWARN = -Wall -Wextra -Wundef -Wstrict-prototypes -Werror 
 
 # Define C++ warning options here
 CPPWARN = -Wall -Wextra -Wundef
@@ -229,7 +233,7 @@ CPPWARN = -Wall -Wextra -Wundef
 #
 
 # List all user C define here, like -D_DEBUG=1
-UDEFS =
+UDEFS = -DHAL_USE_I2C_SLAVE
 
 # Define ASM defines here
 UADEFS =
@@ -268,7 +272,7 @@ upload-olimex: build/$(PROJECT).bin
 	openocd -f interface/ftdi/olimex-arm-usb-tiny-h.cfg -f interface/ftdi/olimex-arm-jtag-swd.cfg -c "set WORKAREASIZE 0x2000" -f target/stm32f4x.cfg -c "program build/$(PROJECT).elf verify reset"
 
 debug-start:
-	openocd -f stm32-bv_openocd.cfg
+	openocd -f stm32-bv_openocd.cfg -c "stm32f4x.cpu configure -rtos auto"
 
 RULESPATH = $(CHIBIOS)/os/common/ports/ARMCMx/compilers/GCC
 include $(RULESPATH)/rules.mk
