@@ -44,7 +44,7 @@
 #define USART1_IRQHandler       VectorD4    /**< USART1.                    */
 #define USART2_IRQHandler       VectorD8    /**< USART2.                    */
 #define USART3_IRQHandler       VectorDC    /**< USART3.                    */
-#define EXTI15_10_IRQHandler    VectorE0    /**< EXTI Line 15..10.          */
+// #define EXTI15_10_IRQHandler    VectorE0    #<{(|*< EXTI Line 15..10.          |)}>#
 #define RTC_Alarm_IRQHandler    VectorE4    /**< RTC alarms (A and B)
                                                  through EXTI line.         */
 #define OTG_FS_WKUP_IRQHandler  VectorE8    /**< USB OTG FS Wakeup through
