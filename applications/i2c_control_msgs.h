@@ -1,6 +1,7 @@
 #ifndef __I2C_MSGS_H__
 #define __I2C_MSGS_H__
 
+#define VESC_CONFIG 0x00
 #define VESC_FEEDBACK 0x01
 #define VESC_STATUS 0x02
 #define VESC_CONTROL_SPEED 0x03
