@@ -29,6 +29,7 @@
 #include <stdio.h> // For snprintf 
 #include <stdlib.h> // For atof
 #include <math.h>
+#include <limits.h>
 #include "ch.h" // ChibiOS
 #include "hal.h" // ChibiOS HAL
 #include "mc_interface.h" // Motor control functions
@@ -52,6 +53,8 @@ void setCommand(void);
 void noteI2cError(uint32_t flags);
 void updateFeedback(void);
 void app_i2cslave_init(void);
+int  descale_position(float pos);
+void reset_homing(void);
 
 // Thread for VESC application
 static THD_FUNCTION(i2cslave_thread, arg);
@@ -101,6 +104,7 @@ static volatile bool needFeeback = false;
 static volatile bool gotCommand = false;
 static I2CDriver *i2cp_g = NULL;
 static i2caddr_t mc_i2c_addr = 0x00; // default I2C Address, by design will crash the app
+static bool enable_homing = false;
 
 // Handler for write messages sent to motor controller
 static const I2CSlaveMsg requestRx = {
@@ -161,6 +165,8 @@ void requestProcessor(I2CDriver *i2cp)
     case VESC_CONTROL_SPEED:
     case VESC_CONTROL_POSITION:
     case VESC_CONTROL_CURRENT:
+    case VESC_CONTROL_DUTY:
+    case VESC_CONTROL_SCALE_POS:
       command_now = request.request;
       gotCommand = true;
       timeout_reset();
@@ -170,6 +176,10 @@ void requestProcessor(I2CDriver *i2cp)
       break;
     case VESC_STATUS:
       i2cSlaveReplyI(i2cp, &statusReply);
+      break;
+    case VESC_CONTROL_HOMING:
+      reset_homing();
+      enable_homing = true;
       break;
     default:
       break;
@@ -199,6 +209,9 @@ void setCommand()
       break;
     case VESC_CONTROL_POSITION:
       mc_interface_set_pid_pos(command_now.value);
+      break;
+    case VESC_CONTROL_SCALE_POS:
+      mc_interface_set_pid_pos(descale_position(command_now.value / 1000.0));
       break;
     default:
       break;
@@ -255,9 +268,9 @@ void statusReplyDone(I2CDriver *i2cp)
 }
 
 
-static bool estop;
-static bool rev_limit;
-static bool fwd_limit;
+static bool estop = true;
+static bool rev_limit = INT_MAX;
+static bool fwd_limit = INT_MIN;
 /*
  * Updates the feedback struct with current data
  */ void updateFeedback()
@@ -270,28 +283,27 @@ static bool fwd_limit;
   fb.feedback.switch_flags = (estop << 2) | (rev_limit << 1) | (fwd_limit);
 }
 
-/* int32_t min_tacho = INT_MAX; */
-/* int32_t max_tacho = INT_MIN; */
-/*  */
-/* void reset_homing(void) { */
-/*   min_tacho = INT_MAX; */
-/*   max_tacho = INT_MIN; */
-/* } */
-/*  */
-/* void homing_sequence(void) { */
-/*   if (max_tacho != ) */
-/*   if (!fwd_limit) { */
-/*     mc_interface_set_duty(.5); */
-/*   } else { */
-/*     max_tacho = mc_interface_get_tachometer_value(false); */
-/*   } */
-/*  */
-/*   while (!rev_limit) { */
-/*     mc_interface_set_duty(-.5); */
-/*   } */
-/*   min_tacho = mc_interface_get_tachometer_value(false); */
-/* } */
-/*  */
+int32_t min_tacho = INT_MAX;
+int32_t max_tacho = INT_MIN;
+
+void reset_homing() {
+  min_tacho = INT_MAX;
+  max_tacho = INT_MIN;
+}
+
+void homing_sequence(void) {
+  if (max_tacho == INT_MIN) {
+    if (!fwd_limit) {
+      mc_interface_set_current(2);
+    } 
+  } else if (min_tacho == INT_MAX) {
+    if (!rev_limit) {
+      mc_interface_set_current(-2);
+    }
+  } else {
+    enable_homing = false;
+  }
+}
 
 
 void toggle_estop(EXTDriver *extp, expchannel_t channel) {
@@ -303,25 +315,39 @@ void toggle_estop(EXTDriver *extp, expchannel_t channel) {
   }
 }
 
-void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel) {
+void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel) 
+{
   (void) extp;
   (void) channel;
   fwd_limit = palReadPad(GPIOC, 0) == PAL_LOW;
-  if (fwd_limit && mc_interface_get_duty_cycle_now() > 0) {
-    mc_interface_brake_now();
+  if (fwd_limit) {
+    if (mc_interface_get_duty_cycle_now() > 0) {
+      mc_interface_brake_now();
+    }
+    max_tacho = mc_interface_get_tachometer_value(false);
   }
 }
 
-void toggle_rev_limit(EXTDriver *extp, expchannel_t channel) {
+void toggle_rev_limit(EXTDriver *extp, expchannel_t channel) 
+{
   (void) extp;
   (void) channel;
   rev_limit = palReadPad(GPIOA, 6) == PAL_HIGH;
-  if (rev_limit && mc_interface_get_duty_cycle_now() < 0) {
-    mc_interface_brake_now();
+  if (rev_limit) {
+    if (mc_interface_get_duty_cycle_now() < 0) {
+      mc_interface_brake_now();
+    }
+    min_tacho = mc_interface_get_tachometer_value(false);
   }
 }
 
-
+int descale_position(float pos)
+{
+  /* assert(pos >= -1 && pos <= 1); */
+    int offset = (max_tacho - min_tacho) * pos / 2;
+    int center = (max_tacho + min_tacho) / 2;
+    return center + offset;
+}
 
 static const EXTConfig extcfg = {
   {
@@ -388,6 +414,7 @@ static THD_FUNCTION(i2cslave_thread, arg)
   i2cMatchAddress(&HW_I2C_DEV, mc_i2c_addr);
 
   while (true) {
+
     if (needFeeback) {
       updateFeedback();
       feedbackReply.size = sizeof(mc_feedback);
@@ -398,19 +425,16 @@ static THD_FUNCTION(i2cslave_thread, arg)
     
     if (estop) {
       mc_interface_set_brake_current(0);
+    } else if (rev_limit && mc_interface_get_duty_cycle_now() < 0) {
+      mc_interface_brake_now();
+    } else if (fwd_limit && mc_interface_get_duty_cycle_now() > 0) {
+      mc_interface_brake_now();
+    } else if (enable_homing) {
+      homing_sequence();
     } else if (gotCommand) {
       setCommand();
       gotCommand = false;
     }
-
-    if (rev_limit && command_now.value < 0) {
-      mc_interface_brake_now();
-    }
-
-    if (fwd_limit && command_now.value > 0) {
-      mc_interface_brake_now();
-    }
-
 
     if (gotI2cError)
     {
