@@ -1,17 +1,103 @@
 #ifndef __I2C_MSGS_H__
 #define __I2C_MSGS_H__
 
-#define VESC_CONFIG 0x00
-#define VESC_FEEDBACK 0x01
-#define VESC_STATUS 0x02
-#define VESC_CONTROL_SPEED 0x03
-#define VESC_CONTROL_ROTOR 0x04
-#define VESC_CONTROL_CURRENT 0x05
-#define VESC_CONTROL_POSITION 0x06
-#define VESC_CONTROL_DUTY 0x07
-#define VESC_CONTROL_HOMING 0x08
-#define VESC_CONTROL_SCALE_POS 0x09
+enum mc_request_type {
+  CHANGE_RESPONSE = 1,
+  CONTROL,
+  CONFIG
+};
 
-#define I2C_ADDR_GEN_CALL 0x00
+enum mc_change_response {
+  FEEDBACK = 1,
+  STATUS,
+  CONFIG_READ
+};
+
+enum mc_control_type {
+  SPEED = 1,
+  CURRENT,
+  POSITION,
+  DUTY,
+  HOMING,
+  SCALE_POS
+};
+
+#define HALL_TABLE_SIZE 8
+
+typedef uint8_t hall_table_t[HALL_TABLE_SIZE];
+
+enum mc_config_param {
+  FOC_KP = 1,
+  FOC_KI,
+  MOTOR_L,
+  MOTOR_R,
+  MOTOR_FLUX,
+  OBSERVER_GAIN,
+  MAX_CURRENT,
+  MIN_CURRENT,
+  POS_PID_KP,
+  POS_PID_KI,
+  POS_PID_KD,
+  SPEED_PID_KP,
+  SPEED_PID_KI,
+  SPEED_PID_KD,
+  SPEED_PID_MIN_RPM,
+  HALL_TABLE
+};
+
+typedef struct {
+  union {
+    int32_t value_i; 
+    float value_f;
+    hall_table_t value_hall;
+  };
+  union {
+    enum mc_change_response response; 
+    enum mc_control_type control;
+    enum mc_config_param param;
+  };
+  enum mc_request_type type;
+} mc_request;
+
+typedef union {
+  mc_request request;
+  uint8_t request_bytes[sizeof(mc_request)];
+} mc_request_union;
+
+typedef union {
+  hall_table_t hall_table;
+  float value;
+} mc_config_value;
+
+typedef union {
+  mc_config_value value;
+  uint8_t value_bytes[sizeof(mc_config_value)];
+} mc_config_union;
+ 
+// Feedback struct to store feedback info between requests
+typedef struct {
+  int32_t motor_current;
+  int32_t commanded_velocity;
+  int32_t measured_velocity;
+  int32_t measured_position;
+  int32_t supply_voltage;
+  int32_t supply_current;
+  uint32_t switch_flags;
+} mc_feedback;
+
+typedef union {
+  mc_feedback feedback;
+  uint8_t feedback_bytes[sizeof(mc_feedback)];
+} mc_feedback_union;
+
+typedef struct {
+  int32_t fault_code;
+  int32_t temp;
+} mc_status;
+
+typedef union {
+  mc_status status;
+  uint8_t status_bytes[sizeof(mc_status)];
+} mc_status_union;
 
 #endif
