@@ -6,7 +6,7 @@ export PATH := ~/bin/oocd/bin:$(PATH)
 
 # Compiler options here.
 ifeq ($(USE_OPT),)
-  USE_OPT = -O1 -g3 -fomit-frame-pointer -falign-functions=16 -std=gnu99
+  USE_OPT = -O3 -g3 -fomit-frame-pointer -falign-functions=16 -std=gnu11
   USE_OPT += -DBOARD_OTG_NOVBUSSENS $(build_args)
   USE_OPT += -fsingle-precision-constant -Wdouble-promotion
   USE_OPT += -fno-schedule-insns -fno-schedule-insns2
