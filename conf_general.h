@@ -120,7 +120,7 @@
 
 // Actual voltage on 3.3V net based on internal reference
 //#define V_REG				(1.21 / ((float)ADC_Value[ADC_IND_VREFINT] / 4095.0))
-#define V_REG				3.3
+#define V_REG				3.3f
 
 // Functions
 void conf_general_init(void);
