@@ -111,23 +111,7 @@ void mc_interface_init(mc_configuration *configuration) {
 	// Start threads
 	chThdCreateStatic(timer_thread_wa, sizeof(timer_thread_wa), NORMALPRIO, timer_thread, NULL);
 
-	// Initialize encoder
-#if !WS2811_ENABLE
-	switch (m_conf.m_sensor_port_mode) {
-		case SENSOR_PORT_MODE_ABI:
-			encoder_init_abi(m_conf.m_encoder_counts);
-			break;
-
-		case SENSOR_PORT_MODE_AS5047_SPI:
-			encoder_init_as5047p_spi();
-			break;
-
-		default:
-			break;
-	}
-#endif
-
-    mcpwm_foc_init(&m_conf);
+  mcpwm_foc_init(&m_conf);
 }
 
 const volatile mc_configuration* mc_interface_get_configuration(void) {
@@ -135,28 +119,6 @@ const volatile mc_configuration* mc_interface_get_configuration(void) {
 }
 
 void mc_interface_set_configuration(mc_configuration *configuration) {
-#if !WS2811_ENABLE
-	if (m_conf.m_sensor_port_mode != configuration->m_sensor_port_mode) {
-		encoder_deinit();
-		switch (configuration->m_sensor_port_mode) {
-		case SENSOR_PORT_MODE_ABI:
-			encoder_init_abi(configuration->m_encoder_counts);
-			break;
-
-		case SENSOR_PORT_MODE_AS5047_SPI:
-			encoder_init_as5047p_spi();
-			break;
-
-		default:
-			break;
-		}
-	}
-
-	if (configuration->m_sensor_port_mode == SENSOR_PORT_MODE_ABI) {
-		encoder_set_counts(configuration->m_encoder_counts);
-	}
-#endif
-
   m_conf = *configuration;
 
 	update_override_limits(&m_conf);
