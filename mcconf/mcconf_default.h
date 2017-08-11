@@ -26,18 +26,15 @@
 #define MCCONF_PWM_MODE					PWM_MODE_SYNCHRONOUS // Default PWM mode
 #endif
 #ifndef MCCONF_SENSOR_MODE
-#define MCCONF_SENSOR_MODE				SENSOR_MODE_SENSORLESS // Sensor mode
+#define MCCONF_SENSOR_MODE				SENSOR_MODE_HALL // Sensor mode
 #endif
-#ifndef MCCONF_COMM_MODE
-#define MCCONF_COMM_MODE				COMM_MODE_INTEGRATE	// The commutation mode to use
-#endif
-
+//
 // Limits
 #ifndef MCCONF_L_CURRENT_MAX
-#define MCCONF_L_CURRENT_MAX			3.0	// Current limit in Amperes (Upper)
+#define MCCONF_L_CURRENT_MAX			30.0	// Current limit in Amperes (Upper)
 #endif
 #ifndef MCCONF_L_CURRENT_MIN
-#define MCCONF_L_CURRENT_MIN			-3.0	// Current limit in Amperes (Lower)
+#define MCCONF_L_CURRENT_MIN			-30.0	// Current limit in Amperes (Lower)
 #endif
 #ifndef MCCONF_L_IN_CURRENT_MAX
 #define MCCONF_L_IN_CURRENT_MAX			60.0	// Input current limit in Amperes (Upper)
@@ -105,7 +102,7 @@
 #define MCCONF_S_PID_KI					0.0002	// Integral gain
 #endif
 #ifndef MCCONF_S_PID_KD
-#define MCCONF_S_PID_KD					0.0		// Derivative gain
+#define MCCONF_S_PID_KD					0.000		// Derivative gain
 #endif
 #ifndef MCCONF_S_PID_MIN_RPM
 #define MCCONF_S_PID_MIN_RPM			100.0	// Minimum allowed RPM
@@ -113,90 +110,21 @@
 
 // Position PID parameters
 #ifndef MCCONF_P_PID_KP
-#define MCCONF_P_PID_KP					.01	// Proportional gain
+#define MCCONF_P_PID_KP					0.001	// Proportional gain
 #endif
 #ifndef MCCONF_P_PID_KI
-#define MCCONF_P_PID_KI					0.000020		// Integral gain
+#define MCCONF_P_PID_KI					0.0000		// Integral gain
 #endif
 #ifndef MCCONF_P_PID_KD
-#define MCCONF_P_PID_KD					0	// Derivative gain
-#endif
-#ifndef MCCONF_P_PID_ANG_DIV
-#define MCCONF_P_PID_ANG_DIV			1.0		// Divide angle by this value
-#endif
-
-// Current control parameters
-#ifndef MCCONF_CC_GAIN
-#define MCCONF_CC_GAIN					0.0046	// Current controller error gain
-#endif
-#ifndef MCCONF_CC_MIN_CURRENT
-#define MCCONF_CC_MIN_CURRENT			1.0		// Minimum allowed current
-#endif
-#ifndef MCCONF_CC_STARTUP_BOOST_DUTY
-#define MCCONF_CC_STARTUP_BOOST_DUTY	0.01	// The lowest duty cycle to use in current control mode (has to be > MCPWM_MIN_DUTY_CYCLE)
-#endif
-#ifndef MCCONF_CC_RAMP_STEP
-#define MCCONF_CC_RAMP_STEP				0.04	// Maximum duty cycle ramping step in CC mode
-#endif
-
-// BLDC
-#ifndef MCCONF_SL_MIN_RPM
-#define MCCONF_SL_MIN_RPM				150		// Auto-commutate below this RPM
-#endif
-#ifndef MCCONF_SL_MIN_ERPM_CYCLE_INT_LIMIT
-#define MCCONF_SL_MIN_ERPM_CYCLE_INT_LIMIT	1100.0	// Minimum RPM to calculate the BEMF coupling from
-#endif
-#ifndef MCCONF_SL_CYCLE_INT_LIMIT
-#define MCCONF_SL_CYCLE_INT_LIMIT		62.0	// Flux integrator limit 0 ERPM
-#endif
-#ifndef MCCONF_SL_BEMF_COUPLING_K
-#define MCCONF_SL_BEMF_COUPLING_K		600.0	// Input voltage to bemf coupling constant
-#endif
-#ifndef MCCONF_SL_PHASE_ADVANCE_AT_BR
-#define MCCONF_SL_PHASE_ADVANCE_AT_BR	0.8		// Flux integrator limit percentage at MCPWM_CYCLE_INT_START_RPM_BR ERPM
-#endif
-#ifndef MCCONF_SL_CYCLE_INT_BR
-#define MCCONF_SL_CYCLE_INT_BR			80000.0	// RPM border between the START and LOW interval
-#endif
-#ifndef MCCONF_SL_MAX_FB_CURR_DIR_CHANGE
-#define MCCONF_SL_MAX_FB_CURR_DIR_CHANGE	10.0	// Maximum current during full brake during which a direction change is allowed
-#endif
-
-// BLDC hall sensor table
-#ifndef MCCONF_HALL_TAB_0
-#define MCCONF_HALL_TAB_0				-1
-#endif
-#ifndef MCCONF_HALL_TAB_1
-#define MCCONF_HALL_TAB_1				1
-#endif
-#ifndef MCCONF_HALL_TAB_2
-#define MCCONF_HALL_TAB_2				3
-#endif
-#ifndef MCCONF_HALL_TAB_3
-#define MCCONF_HALL_TAB_3				2
-#endif
-#ifndef MCCONF_HALL_TAB_4
-#define MCCONF_HALL_TAB_4				5
-#endif
-#ifndef MCCONF_HALL_TAB_5
-#define MCCONF_HALL_TAB_5				6
-#endif
-#ifndef MCCONF_HALL_TAB_6
-#define MCCONF_HALL_TAB_6				4
-#endif
-#ifndef MCCONF_HALL_TAB_7
-#define MCCONF_HALL_TAB_7				-1
-#endif
-#ifndef MCCONF_HALL_ERPM
-#define MCCONF_HALL_ERPM				2000.0	// ERPM above which sensorless commutation is used in hybrid mode
+#define MCCONF_P_PID_KD					10.01	// Derivative gain
 #endif
 
 // FOC
 #ifndef MCCONF_FOC_CURRENT_KP
-#define MCCONF_FOC_CURRENT_KP			0.0119
+#define MCCONF_FOC_CURRENT_KP			0.0125
 #endif
 #ifndef MCCONF_FOC_CURRENT_KI
-#define MCCONF_FOC_CURRENT_KI			6.10
+#define MCCONF_FOC_CURRENT_KI			8.85
 #endif
 #ifndef MCCONF_FOC_F_SW
 #define MCCONF_FOC_F_SW					20000.0
@@ -213,9 +141,6 @@
 #ifndef MCCONF_FOC_ENCODER_RATIO
 #define MCCONF_FOC_ENCODER_RATIO		7.0
 #endif
-#ifndef MCCONF_FOC_SENSOR_MODE
-#define MCCONF_FOC_SENSOR_MODE			FOC_SENSOR_MODE_HALL
-#endif
 #ifndef MCCONF_FOC_PLL_KP
 #define MCCONF_FOC_PLL_KP				2000.0
 #endif
@@ -223,16 +148,16 @@
 #define MCCONF_FOC_PLL_KI				20000.0
 #endif
 #ifndef MCCONF_FOC_MOTOR_L
-#define MCCONF_FOC_MOTOR_L				0.00011576
+#define MCCONF_FOC_MOTOR_L				0.00012252
 #endif
 #ifndef MCCONF_FOC_MOTOR_R
-#define MCCONF_FOC_MOTOR_R				0.06347
+#define MCCONF_FOC_MOTOR_R				0.08629
 #endif
 #ifndef MCCONF_FOC_MOTOR_FLUX_LINKAGE
-#define MCCONF_FOC_MOTOR_FLUX_LINKAGE	0.01895
+#define MCCONF_FOC_MOTOR_FLUX_LINKAGE	0.011502
 #endif
 #ifndef MCCONF_FOC_OBSERVER_GAIN
-#define MCCONF_FOC_OBSERVER_GAIN		8.64e6		// Can be something like 600 / L
+#define MCCONF_FOC_OBSERVER_GAIN		8.16e6		// Can be something like 600 / L
 #endif
 #ifndef MCCONF_FOC_DUTY_DOWNRAMP_KP
 #define MCCONF_FOC_DUTY_DOWNRAMP_KP		10.0	// PI controller for duty control when decreasing the duty
@@ -262,7 +187,7 @@
 #define MCCONF_FOC_HALL_TAB_1			134
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_2
-#define MCCONF_FOC_HALL_TAB_2			198
+#define MCCONF_FOC_HALL_TAB_2			197
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_3
 #define MCCONF_FOC_HALL_TAB_3			166
@@ -271,10 +196,10 @@
 #define MCCONF_FOC_HALL_TAB_4			67
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_5
-#define MCCONF_FOC_HALL_TAB_5			100
+#define MCCONF_FOC_HALL_TAB_5			98
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_6
-#define MCCONF_FOC_HALL_TAB_6			33
+#define MCCONF_FOC_HALL_TAB_6			34
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_7
 #define MCCONF_FOC_HALL_TAB_7			255
@@ -286,15 +211,6 @@
 // Misc
 #ifndef MCCONF_M_FAULT_STOP_TIME
 #define MCCONF_M_FAULT_STOP_TIME		3000	// Ignore commands for this duration in msec when faults occur
-#endif
-#ifndef MCCONF_M_RAMP_STEP
-#define MCCONF_M_RAMP_STEP				0.02	// Duty cycle ramping step (1000 times/sec) at maximum duty cycle
-#endif
-#ifndef MCCONF_M_RAMP_STEP_RPM_LIM
-#define MCCONF_M_RAMP_STEP_RPM_LIM		0.0005	// Ramping step when limiting the RPM
-#endif
-#ifndef MCCONF_M_CURRENT_BACKOFF_GAIN
-#define MCCONF_M_CURRENT_BACKOFF_GAIN	0.5		// The error gain of the current limiting algorithm
 #endif
 #ifndef MCCONF_M_ENCODER_COUNTS
 #define MCCONF_M_ENCODER_COUNTS			8192	// The number of encoder counts
