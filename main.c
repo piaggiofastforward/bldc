@@ -27,18 +27,11 @@
 #include "mc_interface.h"
 #include "mcpwm_foc.h"
 #include "ledpwm.h"
-#include "comm_usb.h"
 #include "ledpwm.h"
-#include "terminal.h"
 #include "hw.h"
 #include "app.h"
 #include "timeout.h"
-#include "comm_can.h"
 #include "ws2811.h"
-#include "led_external.h"
-#include "encoder.h"
-#include "servo.h"
-#include "servo_simple.h"
 #include "utils.h"
 
 /*
