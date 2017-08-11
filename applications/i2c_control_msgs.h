@@ -2,15 +2,11 @@
 #define __I2C_MSGS_H__
 
 enum mc_request_type {
-  CHANGE_RESPONSE = 1,
-  CONTROL,
-  CONFIG
-};
-
-enum mc_change_response {
-  FEEDBACK = 1,
-  STATUS,
-  CONFIG_READ
+  FEEDBACK_READ = 1,
+  CONFIG_READ,
+  STATUS_READ,
+  CONTROL_WRITE,
+  CONFIG_WRITE
 };
 
 enum mc_control_type {
@@ -52,7 +48,6 @@ typedef struct {
     hall_table_t value_hall;
   };
   union {
-    enum mc_change_response response; 
     enum mc_control_type control;
     enum mc_config_param param;
   };

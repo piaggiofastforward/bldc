@@ -59,6 +59,7 @@ int  descale_position(float pos);
 void reset_homing(void);
 void homing_sequence(void);
 volatile float *getParamPtr(enum mc_config_param param);
+inline static float getParameter(enum mc_config_param param);
 
 // Thread for VESC application
 static THD_FUNCTION(i2cslave_thread, arg);
@@ -140,24 +141,27 @@ void catchError(I2CDriver *i2cp)
 }
 
 void changeResponse(I2CDriver *i2cp, 
-                    enum mc_change_response response, 
+                    enum mc_request_type response, 
                     enum mc_config_param param) {
   switch (response) {
-    case FEEDBACK:
+    case FEEDBACK_READ:
       i2cSlaveReplyI(i2cp, &feedbackReply);
       break;
-    case STATUS:
+    case STATUS_READ:
       i2cSlaveReplyI(i2cp, &statusReply);
       break;
-    case CONFIG:
+    case CONFIG_READ:
       if (request.request.param == HALL_TABLE) {
         memcpy(config.value.hall_table, 
                (void *) mc_interface_get_configuration()->foc_hall_table, 
-               sizeof(HALL_TABLE_SIZE));
+               HALL_TABLE_SIZE);
       } else {
-        config.value.value = *getParamPtr(param);
+        config.value.value = getParameter(param);
       }
       i2cSlaveReplyI(i2cp, &configReply);
+      break;
+    default:
+      break;
   }
 }
 
@@ -211,7 +215,7 @@ inline static void setParameter(enum mc_config_param param, float value)
 
 inline static void setHall(hall_table_t hall_table)
 {
-  memcpy((void *) mcconf.foc_hall_table, hall_table, sizeof(HALL_TABLE_SIZE));
+  memcpy((void *) mcconf.foc_hall_table, hall_table, HALL_TABLE_SIZE);
 }
 
 bool updateConfig = false;
@@ -224,15 +228,17 @@ bool updateConfig = false;
 void requestProcessor(I2CDriver *i2cp)
 { 
   switch (request.request.type) {
-    case CHANGE_RESPONSE:
-      changeResponse(i2cp, request.request.response, 0);
+    case FEEDBACK_READ:
+    case STATUS_READ:
+    case CONFIG_READ:
+      changeResponse(i2cp, request.request.type, request.request.param);
       break;
-    case CONTROL:
+    case CONTROL_WRITE:
       command_now = request.request;
       gotCommand = true;
       timeout_reset();
       break;
-    case CONFIG:
+    case CONFIG_WRITE:
       if (request.request.param == HALL_TABLE) {
         setHall(request.request.value_hall);
       } else {
@@ -443,7 +449,7 @@ void app_i2cslave_init()
 {
   hw_start_i2c();
 
-  palSetPadMode(GPIOA, 5, PAL_MODE_INPUT);
+  palSetPadMode(GPIOA, 5, PAL_MODE_INPUT_PULLDOWN);
   /* palSetPadMode(GPIOA, 6, PAL_MODE_INPUT); */
   palSetPadMode(GPIOC, 0, PAL_MODE_INPUT_PULLUP);
   extStart(&EXTD1, &extcfg);
