@@ -87,6 +87,30 @@ static volatile mc_configuration mcconf;
 uint8_t gotI2cError = 0;
 uint32_t lastI2cErrorFlags = 0;
 
+// Each pin can have at most one interrupt across GPIO sets
+// Each index maps to a pin
+static const EXTConfig extcfg = {
+  {
+    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_fwd_limit},
+    {EXT_CH_MODE_DISABLED, NULL},    
+    {EXT_CH_MODE_DISABLED, NULL},    
+    {EXT_CH_MODE_DISABLED, NULL},    
+    {EXT_CH_MODE_DISABLED, NULL},   
+    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_estop},
+    /* {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},*/
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL}
+  }
+};
 
 // Handler for write messages sent to motor controller
 static const I2CSlaveMsg requestRx = { // const, never should be changed
@@ -138,30 +162,6 @@ void app_i2cslave_init()
   /* palSetPadMode(GPIOA, 6, PAL_MODE_INPUT); */
   palSetPadMode(GPIOC, 0, PAL_MODE_INPUT_PULLUP);
 
-  // Each pin can have at most one interrupt across GPIO sets
-  // Each index maps to a pin
-  static const EXTConfig extcfg = {
-    {
-      {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_fwd_limit},
-      {EXT_CH_MODE_DISABLED, NULL},    
-      {EXT_CH_MODE_DISABLED, NULL},    
-      {EXT_CH_MODE_DISABLED, NULL},    
-      {EXT_CH_MODE_DISABLED, NULL},   
-      {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_estop},
-      /* {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},*/
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL},
-      {EXT_CH_MODE_DISABLED, NULL}
-    }
-  };
   extStart(&EXTD1, &extcfg);
 
   estop = palReadPad(GPIOA, 5) == PAL_LOW;
@@ -514,8 +514,8 @@ void updateFeedback()
   fb.feedback.measured_position = mc_interface_get_tachometer_value(false);
   fb.feedback.supply_voltage  = GET_INPUT_VOLTAGE() * 1000;
   fb.feedback.supply_current = mc_interface_get_tot_current_in() * 1000;
-  fb.feedback.switch_flags = ST2MS(chVTGetSystemTimeX());
-  /* fb.feedback.switch_flags = (estop << 2) | (rev_limit << 1) | (fwd_limit); */
+  /* fb.feedback.switch_flags = ST2MS(chVTGetSystemTimeX()); */
+  fb.feedback.switch_flags = (estop << 2) | (rev_limit << 1) | (fwd_limit);
 }
 
 /*
