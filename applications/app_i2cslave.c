@@ -218,7 +218,11 @@ inline static void setHall(hall_table_t hall_table)
   memcpy((void *) mcconf.foc_hall_table, hall_table, HALL_TABLE_SIZE);
 }
 
-bool updateConfig = false;
+static int getStringPotValue(bool reset)
+{
+  (void) reset;
+  return ADC_Value[7];
+}
 
 /*
  * Callback for received messages

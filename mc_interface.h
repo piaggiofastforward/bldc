@@ -44,6 +44,7 @@ void mc_interface_set_pid_speed(float rpm);
 void mc_interface_set_pid_pos(int pos);
 void mc_interface_set_current(float current);
 void mc_interface_set_brake_current(float current);
+void mc_interface_set_tacho_source(int (*tacho_fun)(bool));
 void mc_interface_brake_now(void);
 void mc_interface_release_motor(void);
 float mc_interface_get_duty_cycle_set(void);

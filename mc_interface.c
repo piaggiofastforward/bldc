@@ -53,6 +53,7 @@ static volatile float m_amp_seconds_charged;
 static volatile float m_watt_seconds;
 static volatile float m_watt_seconds_charged;
 static volatile float m_position_set;
+static int (*tacho_fun)(bool) = mcpwm_foc_get_tachometer_value;
 
 // Sampling variables
 #define ADC_SAMPLE_MAX_LEN		2000
@@ -124,6 +125,11 @@ void mc_interface_set_configuration(mc_configuration *configuration) {
 	update_override_limits(&m_conf);
 
   mcpwm_foc_set_configuration(&m_conf);
+}
+
+void mc_interface_set_tacho_source(int (*tacho_src)(bool))
+{
+  tacho_fun = tacho_src;
 }
 
 bool mc_interface_dccal_done(void) {
@@ -357,7 +363,7 @@ float mc_interface_get_tot_current_in_filtered(void) {
 }
 
 int mc_interface_get_tachometer_value(bool reset) {
-  return mcpwm_foc_get_tachometer_value(reset);
+  return tacho_fun(reset);
 }
 
 int mc_interface_get_tachometer_abs_value(bool reset) {
