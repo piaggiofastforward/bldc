@@ -46,7 +46,7 @@ void homing_sequence(void);
 int32_t descale_position(float pos);
 bool shouldMove(void);
 
-static int getStringPotValue(bool reset);
+static int getStringPotValue(void);
 
 volatile float *getParamPtr(enum mc_config_param param);
 inline static float getParameter(enum mc_config_param param);
@@ -169,7 +169,8 @@ void app_i2cslave_init()
   rev_limit = false;
   fwd_limit = palReadPad(GPIOC, 0) == PAL_LOW;
   mcconf = *mc_interface_get_configuration();
-  mc_interface_set_tacho_source(getStringPotValue);
+  (void) getStringPotValue;
+  /* mc_interface_set_pid_pos_src(getStringPotValue); */
 
   chThdCreateStatic(i2cslave_thread_wa, sizeof(i2cslave_thread_wa),
       NORMALPRIO, i2cslave_thread, NULL);
@@ -381,9 +382,8 @@ inline static void setHall(hall_table_t hall_table)
   memcpy((void *) mcconf.foc_hall_table, hall_table, HALL_TABLE_SIZE);
 }
 
-static int getStringPotValue(bool reset)
+static int getStringPotValue()
 {
-  (void) reset;
   return ADC_Value[7];
 }
 
