@@ -141,8 +141,8 @@ static I2CSlaveMsg statusReply = {  // this is in RAM so size may be updated
 
 
 // Response after CONFIG_READ is written
-static const I2CSlaveMsg configReply = { // const, never should be changed 
-  sizeof(config.value_bytes),              
+static I2CSlaveMsg configReply = { // const, never should be changed 
+  0,
   config.value_bytes,                    // config buffer
   NULL,                                  // do nothing on address match 
   configReplyDone,                       // Reset to default feedback reply
@@ -303,6 +303,7 @@ void changeResponse(I2CDriver *i2cp,
       } else {
         config.value.value = getParameter(param);
       }
+      configReply.size = sizeof(mc_config_value);
       i2cSlaveReplyI(i2cp, &configReply);
       break;
     default:
