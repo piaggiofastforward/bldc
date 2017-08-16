@@ -158,9 +158,10 @@ void app_i2cslave_init()
 {
   hw_start_i2c();
 
-  palSetPadMode(GPIOA, 5, PAL_MODE_INPUT_PULLDOWN);
+  // Don't set as pulldown or pullup. Interrupts won't trigger
+  palSetPadMode(GPIOA, 5, PAL_MODE_INPUT);
   /* palSetPadMode(GPIOA, 6, PAL_MODE_INPUT); */
-  palSetPadMode(GPIOC, 0, PAL_MODE_INPUT_PULLUP);
+  palSetPadMode(GPIOC, 0, PAL_MODE_INPUT);
 
   extStart(&EXTD1, &extcfg);
 
@@ -447,7 +448,7 @@ void setCommand()
       mc_interface_set_pid_pos(descale_position(command_now.value_f));
       break;
     case HOMING: 
-      fb.feedback.commanded_value = 0;
+      fb.feedback.commanded_value = mc_interface_get_pid_pos_now();
       homing_sequence();
     default:
       break;
@@ -510,11 +511,11 @@ void statusReplyDone(I2CDriver *i2cp)
  */ 
 void updateFeedback()
 {
-  fb.feedback.motor_current = mc_interface_get_tot_current() * 1000;
+  fb.feedback.motor_current = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
-  fb.feedback.measured_position = mc_interface_get_tachometer_value(false);
-  fb.feedback.supply_voltage  = GET_INPUT_VOLTAGE() * 1000;
-  fb.feedback.supply_current = mc_interface_get_tot_current_in() * 1000;
+  fb.feedback.measured_position = mc_interface_get_pid_pos_now();
+  fb.feedback.supply_voltage  = GET_INPUT_VOLTAGE();
+  fb.feedback.supply_current = mc_interface_get_tot_current_in();
   /* fb.feedback.switch_flags = ST2MS(chVTGetSystemTimeX()); */
   fb.feedback.switch_flags = (estop << 2) | (rev_limit << 1) | (fwd_limit);
 }
