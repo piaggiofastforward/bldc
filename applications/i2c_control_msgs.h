@@ -3,11 +3,17 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef ARDUINO
+#define ENUM_SIZE : uint8_t
+#else 
+#define ENUM_SIZE
+#endif
+
 /***************************
  * VESC REQUEST DATATYPES  *
  ***************************/
 // An enum to differentiate the type of request
-enum mc_request_type {
+enum mc_request_type ENUM_SIZE {
   FEEDBACK_READ = 1,
   CONFIG_READ,
   STATUS_READ,
@@ -16,7 +22,7 @@ enum mc_request_type {
 };
 
 // An enum to differentiate control modes
-enum mc_control_mode {
+enum mc_control_mode ENUM_SIZE {
   SPEED = 1, // use value_i
   CURRENT, // use value_f
   POSITION, // use value_i
@@ -28,7 +34,7 @@ enum mc_control_mode {
 // An enum to differentiate config parameters
 // use value_f in request
 // use value in config_value response
-enum mc_config_param {
+enum mc_config_param ENUM_SIZE {
   FOC_KP = 1, 
   FOC_KI,
   MOTOR_L,
@@ -91,12 +97,12 @@ typedef union {
  ***************************/
 // The struct that represents a feedback message
 typedef struct {
-  int32_t motor_current;
+  float motor_current;
   int32_t commanded_value;
   int32_t measured_velocity;
   int32_t measured_position;
-  int32_t supply_voltage;
-  int32_t supply_current;
+  float supply_voltage;
+  float supply_current;
   uint32_t switch_flags;
 } mc_feedback;
 
@@ -111,8 +117,8 @@ typedef union {
  *************************/
 // The struct that represents a status message
 typedef struct {
-  int32_t fault_code;
-  int32_t temp;
+  uint32_t fault_code;
+  uint32_t temp;
   bool limits_set;
 } mc_status;
 
