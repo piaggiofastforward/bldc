@@ -104,6 +104,9 @@ static volatile int m_tachometer_abs;
 static volatile float last_inj_adc_isr_duration;
 static volatile int m_pos_pid_now;
 
+static int default_pos_fun(void) {return m_tachometer;}
+static int (*pos_fun)(void) = default_pos_fun;
+
 // Private functions
 static void do_dc_cal(void);
 void observer_update(float v_alpha, float v_beta, float i_alpha, float i_beta,
@@ -539,6 +542,10 @@ void mcpwm_foc_set_pid_pos(int pos) {
 	}
 }
 
+void mcpwm_foc_set_pid_pos_src(int (*pos_src)(void)) {
+  pos_fun = pos_src;
+}
+
 /**
  * Use current control and specify a goal current to use. The sign determines
  * the direction of the torque. Absolute values less than
@@ -603,7 +610,7 @@ int mcpwm_foc_get_pid_pos_set(void) {
 }
 
 int mcpwm_foc_get_pid_pos_now(void) {
-	return m_tachometer;
+	return pos_fun();
 }
 
 /**
@@ -1569,7 +1576,7 @@ void mcpwm_foc_adc_inj_int_handler(void) {
 
 	// Run position control
 	if (m_state == MC_STATE_RUNNING) {
-		run_pid_control_pos(m_tachometer, m_pos_pid_set, dt);
+		run_pid_control_pos(pos_fun(), m_pos_pid_set, dt);
 	}
 
 	// MCIF handler
