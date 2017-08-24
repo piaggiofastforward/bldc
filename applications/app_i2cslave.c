@@ -170,8 +170,8 @@ void app_i2cslave_init()
   rev_limit = false;
   fwd_limit = palReadPad(GPIOC, 0) == PAL_LOW;
   mcconf = *mc_interface_get_configuration();
-  (void) getStringPotValue;
-  /* mc_interface_set_pid_pos_src(getStringPotValue); */
+  /* (void) getStringPotValue; */
+  mc_interface_set_pid_pos_src(getStringPotValue);
 
   chThdCreateStatic(i2cslave_thread_wa, sizeof(i2cslave_thread_wa),
       NORMALPRIO, i2cslave_thread, NULL);
@@ -516,8 +516,8 @@ void updateFeedback()
   fb.feedback.measured_position = mc_interface_get_pid_pos_now();
   fb.feedback.supply_voltage  = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current = mc_interface_get_tot_current_in();
-  /* fb.feedback.switch_flags = ST2MS(chVTGetSystemTimeX()); */
-  fb.feedback.switch_flags = (estop << 2) | (rev_limit << 1) | (fwd_limit);
+  fb.feedback.switch_flags = ST2MS(chVTGetSystemTimeX());
+  /* fb.feedback.switch_flags = (estop << 2) | (rev_limit << 1) | (fwd_limit); */
 }
 
 /*
