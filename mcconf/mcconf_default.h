@@ -110,21 +110,21 @@
 
 // Position PID parameters
 #ifndef MCCONF_P_PID_KP
-#define MCCONF_P_PID_KP					0.03	// Proportional gain
+#define MCCONF_P_PID_KP					0.0	// Proportional gain
 #endif
 #ifndef MCCONF_P_PID_KI
 #define MCCONF_P_PID_KI					0.0000		// Integral gain
 #endif
 #ifndef MCCONF_P_PID_KD
-#define MCCONF_P_PID_KD					0.0004	// Derivative gain
+#define MCCONF_P_PID_KD					0.0	// Derivative gain
 #endif
 
 // FOC
 #ifndef MCCONF_FOC_CURRENT_KP
-#define MCCONF_FOC_CURRENT_KP			0.0121
+#define MCCONF_FOC_CURRENT_KP			0.0
 #endif
 #ifndef MCCONF_FOC_CURRENT_KI
-#define MCCONF_FOC_CURRENT_KI			9.4
+#define MCCONF_FOC_CURRENT_KI			0.0
 #endif
 #ifndef MCCONF_FOC_F_SW
 #define MCCONF_FOC_F_SW					20000.0
@@ -148,16 +148,16 @@
 #define MCCONF_FOC_PLL_KI				20000.0
 #endif
 #ifndef MCCONF_FOC_MOTOR_L
-#define MCCONF_FOC_MOTOR_L				0.00012066
+#define MCCONF_FOC_MOTOR_L				0.0
 #endif
 #ifndef MCCONF_FOC_MOTOR_R
-#define MCCONF_FOC_MOTOR_R				0.09397
+#define MCCONF_FOC_MOTOR_R				0.0
 #endif
 #ifndef MCCONF_FOC_MOTOR_FLUX_LINKAGE
-#define MCCONF_FOC_MOTOR_FLUX_LINKAGE	.001169
+#define MCCONF_FOC_MOTOR_FLUX_LINKAGE	0.0
 #endif
 #ifndef MCCONF_FOC_OBSERVER_GAIN
-#define MCCONF_FOC_OBSERVER_GAIN		8.26e6 // Can be something like 600 / L
+#define MCCONF_FOC_OBSERVER_GAIN		0 // Can be something like 600 / L
 #endif
 #ifndef MCCONF_FOC_DUTY_DOWNRAMP_KP
 #define MCCONF_FOC_DUTY_DOWNRAMP_KP		10.0	// PI controller for duty control when decreasing the duty
@@ -184,22 +184,22 @@
 #define MCCONF_FOC_HALL_TAB_0			255
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_1
-#define MCCONF_FOC_HALL_TAB_1			134
+#define MCCONF_FOC_HALL_TAB_1			255
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_2
-#define MCCONF_FOC_HALL_TAB_2			197
+#define MCCONF_FOC_HALL_TAB_2			255
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_3
-#define MCCONF_FOC_HALL_TAB_3			166
+#define MCCONF_FOC_HALL_TAB_3			255
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_4
-#define MCCONF_FOC_HALL_TAB_4			68
+#define MCCONF_FOC_HALL_TAB_4			255
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_5
-#define MCCONF_FOC_HALL_TAB_5			98
+#define MCCONF_FOC_HALL_TAB_5			255
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_6
-#define MCCONF_FOC_HALL_TAB_6			34
+#define MCCONF_FOC_HALL_TAB_6			255
 #endif
 #ifndef MCCONF_FOC_HALL_TAB_7
 #define MCCONF_FOC_HALL_TAB_7			255
