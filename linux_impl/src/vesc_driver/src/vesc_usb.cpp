@@ -33,11 +33,11 @@ static serial::Serial ser;
  * return -1 -> other error
  * return  0 -> all good
  */
-static int initSerial()
+static int initSerial(const char* port)
 {
 #if PLATFORM_IS_LINUX
   // initialize USB port
-  ser.setPort("/dev/ttyACM0");
+  ser.setPort(port);
   ser.setBaudrate(115200);
 
   try
@@ -113,9 +113,9 @@ void sendPacket(uint8_t *data, unsigned int length)
 }
 
 
-int initComm(feedback_callback_t feedback_cb, status_callback_t status_cb)
+int initComm(feedback_callback_t feedback_cb, status_callback_t status_cb, const char* port)
 {
-  initSerial();
+  initSerial(port);
   
   // pass function for sending whole packet as well as function
   // for receiving whole packet to the packet.h

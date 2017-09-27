@@ -31,8 +31,7 @@ class RosHandler
 {
 public:
   RosHandler(const char* feedback_topic, const char* status_topic,
-  	const char* command_topic, const char* port,
-  	bool is_drive_motor, ros::NodeHandle *nh);
+  	const char* command_topic, bool is_drive_motor, ros::NodeHandle *nh);
 
   void commandCallback(const vesc_driver::Command::ConstPtr &msg);
   void publishFeedback();

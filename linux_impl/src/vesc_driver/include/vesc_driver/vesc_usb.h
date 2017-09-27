@@ -25,7 +25,7 @@ void sendPacket(uint8_t *data, unsigned int length);
  *
  * Negative return codes represent an error condition.
  */
-int initComm(feedback_callback_t feedback_cb, status_callback_t status_cb);
+int initComm(feedback_callback_t feedback_cb, status_callback_t status_cb, const char* port);
 
 /**
  * Whenever a byte is received, call this function with that byte

@@ -30,8 +30,7 @@ static volatile int statusBufWriteIndex = 0;
 static volatile int statusBufReadIndex = 0;
 
 RosHandler::RosHandler(const char* feedback_topic, const char* status_topic,
-    const char* command_topic, const char* port,
-    bool is_drive_motor, ros::NodeHandle *nh
+    const char* command_topic, bool is_drive_motor, ros::NodeHandle *nh
 )
   : is_drive_motor_(is_drive_motor)
 
