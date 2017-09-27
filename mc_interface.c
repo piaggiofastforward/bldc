@@ -399,6 +399,10 @@ void mc_interface_set_pid_pos(float pos) {
 	}
 }
 
+void mc_interface_set_pid_pos_src(int (*pos_src)(void)) {
+  mcpwm_foc_set_pid_pos_src(pos_src);
+}
+
 void mc_interface_set_current(float current) {
 	if (mc_interface_try_input()) {
 		return;
