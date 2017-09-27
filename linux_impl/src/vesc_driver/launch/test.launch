@@ -1,0 +1,28 @@
+<launch>
+
+  <arg name="motor_namespace"/>
+
+  <arg name="port" default="/dev/pff/vesc_1" />
+  <arg name="feedback_topic" default="feedback"/>
+  <arg name="status_topic" default="status"/>
+  <arg name="cmd_topic" default="cmd"/>
+  <arg name="is_drive_motor" default="true" />
+
+  <group ns="r5">
+	  <node name="vesc_driver" 
+	        pkg="vesc_driver"
+	        type="vesc_driver_node"
+	        output="screen">
+
+	    <param name="port" value="$(arg port)"/>
+	    <param name="is_drive_motor" value="$(arg is_drive_motor)" />
+	    <param name="feedback_topic" value="$(arg feedback_topic)"/>
+	    <param name="status_topic" value="$(arg status_topic)"/>
+	    <param name="cmd_topic" value="$(arg cmd_topic)"/>
+	    <remap from="vesc_driver/$(arg feedback_topic)" to="$(arg motor_namespace)/$(arg feedback_topic)"/>
+	    <remap from="vesc_driver/$(arg status_topic)" to="$(arg motor_namespace)/$(arg status_topic)"/>
+	    <remap from="vesc_driver/$(arg cmd_topic)" to="$(arg motor_namespace)/$(arg cmd_topic)"/>
+	  </node>
+  </group>
+
+</launch>
