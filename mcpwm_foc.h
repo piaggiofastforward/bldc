@@ -42,6 +42,7 @@ void mcpwm_foc_set_handbrake(float current);
 void mcpwm_foc_set_openloop(float current, float rpm);
 float mcpwm_foc_get_duty_cycle_set(void);
 float mcpwm_foc_get_duty_cycle_now(void);
+void mcpwm_foc_set_pid_pos_src(int (*pos_src)(void));
 float mcpwm_foc_get_pid_pos_set(void);
 float mcpwm_foc_get_pid_pos_now(void);
 float mcpwm_foc_get_switching_frequency_now(void);
