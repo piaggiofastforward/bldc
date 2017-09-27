@@ -13,10 +13,10 @@
  * VESC REQUEST DATATYPES  *
  ***************************/
 // An enum to differentiate the type of request
-enum mc_request_type ENUM_SIZE {
-  // FEEDBACK_READ = 1,
-  CONFIG_READ = 1,
-  // STATUS_READ,
+enum mc_packet_type ENUM_SIZE {
+  FEEDBACK_DATA = 1,
+  CONFIG_READ,
+  STATUS_DATA,
   CONTROL_WRITE,
   CONFIG_WRITE
 };
@@ -68,7 +68,7 @@ typedef struct {
     enum mc_control_mode control;
     enum mc_config_param param;
   };
-  enum mc_request_type type;
+  enum mc_packet_type type;
 } mc_request;
 
 // A union to simplify sending a request over i2c

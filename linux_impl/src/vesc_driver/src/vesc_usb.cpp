@@ -1,5 +1,6 @@
 #include "vesc_driver/vesc_usb.h"
 #include "inttypes.h"
+#include "ros/ros.h"
 
 #include "serial/serial.h"
 #include "vesc_driver/control_msgs.h"
@@ -72,7 +73,9 @@ static size_t readBytes(uint8_t * dest, unsigned int max_bytes)
  */
 static void serialProcessPacket(unsigned char *data, unsigned int length)
 {
-
+  char msg[50];
+  sprintf(msg, "1st byte: %u, length: %u", data[0], length);
+  ROS_WARN(msg);
   switch (data[0])
   {
     case FEEDBACK_DATA:
@@ -94,6 +97,7 @@ static void serialProcessPacket(unsigned char *data, unsigned int length)
       break;
 
     default:
+      ROS_WARN("default case");
 
       break;
   }
