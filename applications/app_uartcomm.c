@@ -74,6 +74,7 @@ static volatile bool fwd_limit = false;
 
 // structs to hold transaction data
 static mc_feedback_union fb;
+static mc_status_union status;
 static mc_request_union request;
 static volatile mc_request currentCommand = {{0}, {0}, 0};
 static volatile mc_configuration mcconf;
@@ -84,8 +85,32 @@ static void setCommand(void);
 static void setParameter(enum mc_config_param param, float value);
 static int getStringPotValue(void);
 
+// feedback and status publishing functions, as well as virtual timers for
+// executing these tasks
+static virtual_timer_t feedback_task_vt;
+static virtual_timer_t status_task_vt;
+
+// use so that we dont publish feedback and status simultaneously
+static void feedbackTaskCb(void* _);
+static void statusTaskCb(void* _);
+
 void sendFeedback(void);
 void updateFeedback(void);
+void sendStatus(void);
+void updateStatus(void);
+
+
+/**
+ * The functions that set the flags which prompt us to write status/feedback in the
+ * main loop will be called at these rates. Therefore, these rates should be set slightly
+ * below the desired write rate since there is a small latency between the time the flag
+ * is set at the time at which the entire desired packet is sent out.
+ */ 
+#define FB_RATE_MS     18  // 50Hz
+#define STATUS_RATE_MS 48  // 20Hz
+#define STATUS_INITIAL_DELAY ((STATUS_RATE_MS - FB_RATE_MS) / 2)
+volatile bool shouldSendStatus   = false;
+volatile bool shouldSendFeedback = false;
 
 volatile float *getParamPtr(enum mc_config_param param);
 
@@ -337,6 +362,15 @@ static THD_FUNCTION(packet_process_thread, arg)
 
 	process_tp = chThdGetSelfX();
 
+  /**
+   * Initialize timers for feedback and status reports. Start publishing status a 
+   * little later so that we dont try to publish status and feedback at the same time.
+   */
+  chVTObjectInit(&status_task_vt);
+  chVTObjectInit(&feedback_task_vt);
+  chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
+
 	while (1)
 	{
 		// i dont think we need to do this, sinze we want to continually send out feedback updates
@@ -344,7 +378,16 @@ static THD_FUNCTION(packet_process_thread, arg)
 
 		// send out feedback on every loop. If we are not receiving data, this will happen at about
 		// 50Hz
-		sendFeedback();
+		if (shouldSendFeedback)
+    {
+      sendFeedback();
+      shouldSendFeedback = false;
+    }
+    if (shouldSendStatus)
+    {
+      sendStatus();
+      shouldSendStatus = false;
+    }
 
 		if (estop)
 		{
@@ -414,7 +457,6 @@ static THD_FUNCTION(packet_process_thread, arg)
 				serial_rx_read_pos = 0;
 			}
 		}
-		chThdSleepMilliseconds(15);
 	}
 }
 
@@ -425,20 +467,36 @@ static THD_FUNCTION(packet_process_thread, arg)
 													Implementation-specific
 
 *****************************************************************************/
+static void feedbackTaskCb(void* _)
+{
+  (void)_;
+  shouldSendFeedback = true;
+  chSysLockFromISR();
+  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  chSysUnlockFromISR();
+}
 
+static void statusTaskCb(void* _)
+{
+  (void)_;
+  shouldSendStatus = true;
+  chSysLockFromISR();
+  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+  chSysUnlockFromISR();
+}
 
 /*
  * Updates the feedback struct with current data
  */ 
 void updateFeedback(void)
 {
-  fb.feedback.motor_current = mc_interface_get_tot_current();
+  fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
   fb.feedback.measured_position = mc_interface_get_pid_pos_now();
-  fb.feedback.supply_voltage  = GET_INPUT_VOLTAGE();
-  fb.feedback.supply_current = mc_interface_get_tot_current_in();
-  fb.feedback.switch_flags = ST2MS(chVTGetSystemTimeX());
-  /* fb.feedback.switch_flags = (estop << 2) | (rev_limit << 1) | (fwd_limit); */
+  fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
+  fb.feedback.supply_current    = mc_interface_get_tot_current_in();
+  // fb.feedback.switch_flags      = ST2MS(chVTGetSystemTimeX());
+  fb.feedback.switch_flags      = (estop << 2) | (rev_limit << 1) | (fwd_limit); 
 }
 
 /**
@@ -447,7 +505,26 @@ void updateFeedback(void)
 void sendFeedback(void)
 {
 	updateFeedback();
-	send_packet_wrapper(fb.feedback_bytes, sizeof(mc_feedback));
+  uint8_t data[sizeof(mc_feedback) + 1];
+  data[0] = FEEDBACK_DATA;
+  memcpy(data + 1, fb.feedback_bytes, sizeof(mc_feedback));
+	send_packet_wrapper(data, sizeof(data));
+}
+
+void updateStatus(void)
+{
+  status.status.fault_code = mc_interface_get_fault();
+  status.status.temp       = NTC_TEMP(ADC_IND_TEMP_MOS);
+  status.status.limits_set = min_tacho != INT_MAX && max_tacho != INT_MIN;
+}
+
+void sendStatus(void)
+{
+  updateStatus();
+  uint8_t data[sizeof(mc_status) + 1];
+  data[0] = STATUS_DATA;
+  memcpy(data + 1, status.status_bytes, sizeof(mc_status));
+  send_packet_wrapper(data, sizeof(data));
 }
 
 void setCommand()
