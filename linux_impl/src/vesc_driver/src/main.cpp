@@ -31,9 +31,6 @@ int main(int argc, char** argv)
   nh.param<std::string>("cmd_topic", cmd_topic, cmd_topic);
   nh.param<bool>("is_drive_motor", is_drive_motor, is_drive_motor);
 
-  ROS_WARN_STREAM("namespace is" << nh.getNamespace() << "\n");
-  ROS_WARN_STREAM("config: port [" << port << "]\n");
-
   vesc::RosHandler ros_handler(
     fb_topic.c_str(), status_topic.c_str(), cmd_topic.c_str(), is_drive_motor, &nh
   );

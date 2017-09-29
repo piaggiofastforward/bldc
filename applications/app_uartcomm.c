@@ -100,6 +100,10 @@ void sendStatus(void);
 void updateStatus(void);
 
 
+// for testing purposes
+void echoCommand();
+
+
 /**
  * The functions that set the flags which prompt us to write status/feedback in the
  * main loop will be called at these rates. Therefore, these rates should be set slightly
@@ -247,9 +251,9 @@ static UARTConfig uart_cfg = {
 static void process_packet(unsigned char *data, unsigned int len)
 {
 	(void)len;
-	memcpy(request.request_bytes, data, sizeof(request.request_bytes));
+  memcpy(request.request_bytes, data + 1, sizeof(mc_request));
 
-	switch (request.request.type)
+	switch (data[0])
 	{
 		case CONFIG_READ:
 
@@ -366,10 +370,10 @@ static THD_FUNCTION(packet_process_thread, arg)
    * Initialize timers for feedback and status reports. Start publishing status a 
    * little later so that we dont try to publish status and feedback at the same time.
    */
-  chVTObjectInit(&status_task_vt);
-  chVTObjectInit(&feedback_task_vt);
-  chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
-  chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
+  // chVTObjectInit(&status_task_vt);
+  // chVTObjectInit(&feedback_task_vt);
+  // chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  // chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
 
 	while (1)
 	{
@@ -397,9 +401,12 @@ static THD_FUNCTION(packet_process_thread, arg)
 		{
 			mc_interface_brake_now();
 		}
-		else if (commandReceived)
+		if (commandReceived)
 		{
-			setCommand();
+			// setCommand();
+
+      // for testing purposes, just write the command back over UART
+      echoCommand();
 			commandReceived = false;
 		}
 
@@ -467,6 +474,17 @@ static THD_FUNCTION(packet_process_thread, arg)
 													Implementation-specific
 
 *****************************************************************************/
+
+// for testing purposes, you can have the VESC echo back a received request
+// instead of actually issuing the command
+void echoCommand()
+{
+  uint8_t data[sizeof(mc_request) + 1];
+  data[0] = CONTROL_WRITE;
+  memcpy(data + 1, request.request_bytes, sizeof(mc_request));
+  send_packet_wrapper(data, sizeof(data)); 
+}
+
 static void feedbackTaskCb(void* _)
 {
   (void)_;
