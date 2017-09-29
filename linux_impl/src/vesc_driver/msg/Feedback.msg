@@ -4,14 +4,17 @@ int32 measured_velocity
 int32 measured_position
 float32 supply_voltage
 float32 supply_current
+
+
+# use logical AND on the switch flags eg. switch_flag = 5 means that both
+# ESTOP and REV_LIMIT are set...
+#
+#  if (feedback_message & ESTOP)
+#    // estop is set
+#  if (feedback_message & REV_LIMIT)
+#    // rev_limit is set
+#
+uint32 REV_LIMIT = 1
+uint32 FWD_LIMIT = 2
+uint32 ESTOP     = 4
 uint32 switch_flags
-
-uint8 FAULT_CODE_NONE = 0
-uint8 FAULT_CODE_OVER_VOLTAGE = 1
-uint8 FAULT_CODE_UNDER_VOLTAGE = 2
-uint8 FAULT_CODE_DRV8302 = 3
-uint8 FAULT_CODE_ABS_OVER_CURRENT = 4
-uint8 FAULT_CODE_OVER_TEMP_FET = 5
-uint8 FAULT_CODE_OVER_TEMP_MOTOR = 6
-
-uint8 status_code
