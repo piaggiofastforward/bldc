@@ -10,6 +10,11 @@ void onTimerCallback(const ros::TimerEvent &)
   vesc::onMillisTick();
 }
 
+void refreshTimer()
+{
+  vesc::onMillisTick();
+}
+
 
 int main(int argc, char** argv)
 {
@@ -38,9 +43,10 @@ int main(int argc, char** argv)
   vesc::initComm(vesc::processFeedback, vesc::processStatus, port.c_str());
 
   ROS_WARN("Listening for VESC commands...");
-  nh.createTimer(ros::Duration(0.001), onTimerCallback);
+  // nh.createTimer(ros::Duration(0.001), onTimerCallback);
   while(ros::ok())
   {
+    refreshTimer();
     vesc::processBytes();
     if (vesc::feedbackMessagesPending())
       ros_handler.publishFeedback();
