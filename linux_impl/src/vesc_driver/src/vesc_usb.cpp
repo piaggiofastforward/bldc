@@ -42,6 +42,8 @@ static int initSerial(const char* port)
   // initialize USB port
   ser.setPort(port);
   ser.setBaudrate(115200);
+  serial::Timeout to(serial::Timeout::simpleTimeout(500));
+  ser.setTimeout(to);
 
   try
   {
@@ -59,7 +61,9 @@ static int initSerial(const char* port)
 
 static void serialSendPacket(uint8_t *data, unsigned int length)
 {
-  ser.write(data, (size_t)length);
+  ROS_WARN_STREAM("writing messages to VESC...length: " << length);
+  size_t bytes_written = ser.write((const uint8_t*)data, length);
+  ROS_WARN_STREAM("bytes written: " << bytes_written);
 }
 
 static size_t readBytes(uint8_t * dest, unsigned int max_bytes)
@@ -75,6 +79,9 @@ static size_t readBytes(uint8_t * dest, unsigned int max_bytes)
  */
 static void serialProcessPacket(unsigned char *data, unsigned int length)
 {
+  mc_request_union request;
+  float value;
+  char msg[80];
   switch (data[0])
   {
     case FEEDBACK_DATA:
@@ -97,6 +104,27 @@ static void serialProcessPacket(unsigned char *data, unsigned int length)
       statusCallback(status.status);
       break;
 
+    /**
+     * Currently, the only need for this is to verify that the VESC is correctly
+     * parsing the command messages that we're giving out.
+     */
+    case CONTROL_WRITE:
+      memcpy(request.request_bytes, data + 1, sizeof(mc_request));
+      switch(request.request.control)
+      {
+        case SPEED:
+        case POSITION:
+          value = request.request.value_i;
+          break;
+        case CURRENT:
+        case DUTY:
+        case SCALE_POS:
+          value = request.request.value_f;
+      }
+      snprintf(msg, sizeof msg, "Echo-> type: %d, value: %f, control_mode: %d", 
+        request.request.type, value, request.request.control);
+      ROS_WARN(msg);
+      break;
     default:
       ROS_WARN("default case");
 
@@ -117,16 +145,22 @@ void sendPacket(uint8_t *data, unsigned int length)
   packet_send_packet(data, length, PACKET_HANDLER);
 }
 
-
+/**
+ * Return a negative number if the serial port was not set up correctly. Otherwise,
+ * return 0.
+ */
 int initComm(feedback_callback_t feedback_cb, status_callback_t status_cb, const char* port)
 {
-  initSerial(port);
+  int serialSuccess = initSerial(port);
+  if (serialSuccess != 0)
+    return serialSuccess;
   
   // pass function for sending whole packet as well as function
   // for receiving whole packet to the packet.h
   packet_init(serialSendPacket, serialProcessPacket, PACKET_HANDLER);
   feedbackCallback = feedback_cb;
   statusCallback = status_cb;
+  return 0;
 
   //bldc_interface_init(sendPacket);
   // bldc_interface_set_rx_value_func(feedback_cb);

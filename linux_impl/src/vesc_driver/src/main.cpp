@@ -15,7 +15,6 @@ void refreshTimer()
   vesc::onMillisTick();
 }
 
-
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "~");
@@ -40,7 +39,8 @@ int main(int argc, char** argv)
   );
 
   // initialize vesc communication
-  vesc::initComm(vesc::processFeedback, vesc::processStatus, port.c_str());
+  if (vesc::initComm(vesc::processFeedback, vesc::processStatus, port.c_str()) != 0)
+    ROS_ERROR("Error setting up serial port");
 
   ROS_WARN("Listening for VESC commands...");
   // nh.createTimer(ros::Duration(0.001), onTimerCallback);

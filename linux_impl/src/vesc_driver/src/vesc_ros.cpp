@@ -78,7 +78,10 @@ void RosHandler::commandCallback(const vesc_driver::Command::ConstPtr &msg)
     request.request.control = POSITION;
     request.request.value_i = msg->target_cmd;
   }
-  sendPacket(request.request_bytes, sizeof(mc_request));
+  uint8_t data[sizeof(mc_request) + 1];
+  data[0] = CONTROL_WRITE;
+  memcpy(data + 1, request.request_bytes, sizeof(mc_request));
+  sendPacket(data, sizeof(data));
 }
 
 /**
