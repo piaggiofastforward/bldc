@@ -95,7 +95,7 @@ void RosHandler::publishFeedback()
 void RosHandler::publishStatus()
 {
   if (!statusMessagesPending())
-    return
+    return;
   status_pub_.publish(status_to_publish[statusBufReadIndex]);
   statusBufReadIndex = (statusBufReadIndex + 1) % FEEDBACK_BUF_SIZE;
 }
@@ -107,7 +107,6 @@ void RosHandler::publishStatus()
 void processFeedback(const mc_feedback &fb)
 {
   vesc_driver::Feedback msg;
-  msg.supply_voltage     = fb.supply_voltage;
   msg.motor_current     = fb.motor_current;
   msg.measured_velocity = fb.measured_velocity;
   msg.measured_position = fb.measured_position;

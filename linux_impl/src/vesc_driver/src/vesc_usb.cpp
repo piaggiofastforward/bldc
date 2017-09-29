@@ -1,6 +1,7 @@
 #include "vesc_driver/vesc_usb.h"
 #include "inttypes.h"
 #include "ros/ros.h"
+#include "ros/console.h"
 
 #include "serial/serial.h"
 #include "vesc_driver/control_msgs.h"
@@ -17,6 +18,7 @@ namespace vesc
 {
 
 static mc_feedback_union feedback;
+static mc_status_union   status;
 static feedback_callback_t feedbackCallback = NULL;
 static status_callback_t statusCallback = NULL;
 
@@ -73,14 +75,14 @@ static size_t readBytes(uint8_t * dest, unsigned int max_bytes)
  */
 static void serialProcessPacket(unsigned char *data, unsigned int length)
 {
-  char msg[50];
-  sprintf(msg, "1st byte: %u, length: %u", data[0], length);
-  ROS_WARN(msg);
   switch (data[0])
   {
     case FEEDBACK_DATA:
-      mc_feedback_union feedback;
-      memcpy(feedback.feedback_bytes, data, sizeof(mc_feedback));
+      /**
+       * The first received byte is the packet identifier (FEEDBACK_DATA, STATUS_DATA, etc)
+       * so copy starting at data[1] since this is the actual payload.
+       */
+      memcpy(feedback.feedback_bytes, data + 1, sizeof(mc_feedback));
       feedbackCallback(feedback.feedback);
       break;
 
@@ -91,8 +93,7 @@ static void serialProcessPacket(unsigned char *data, unsigned int length)
       break;
 
     case STATUS_DATA:
-      mc_status_union status;
-      memcpy(status.status_bytes, data, sizeof(mc_status));
+      memcpy(status.status_bytes, data + 1, sizeof(mc_status));
       statusCallback(status.status);
       break;
 
@@ -149,7 +150,9 @@ int processBytes()
   if (bytes_read > 0)
   {
     for (int i = 0; i < bytes_read; ++i)
+    {
       byteReceived(buf[i]);
+    }
   }
   return bytes_read;
 }
