@@ -73,9 +73,9 @@ static volatile bool fwd_limit = false;
 
 
 // structs to hold transaction data
-static mc_feedback_union fb;
-static mc_status_union status;
-static mc_request_union request;
+static volatile mc_feedback_union fb;
+static volatile mc_status_union status;
+static volatile mc_request_union request;
 static volatile mc_request currentCommand = {{0}, {0}, 0};
 static volatile mc_configuration mcconf;
 
@@ -110,8 +110,8 @@ void echoCommand();
  * below the desired write rate since there is a small latency between the time the flag
  * is set at the time at which the entire desired packet is sent out.
  */ 
-#define FB_RATE_MS     18  // 50Hz
-#define STATUS_RATE_MS 48  // 20Hz
+#define FB_RATE_MS     20  // 50Hz
+#define STATUS_RATE_MS 50  // 20Hz
 #define STATUS_INITIAL_DELAY ((STATUS_RATE_MS - FB_RATE_MS) / 2)
 volatile bool shouldSendStatus   = false;
 volatile bool shouldSendFeedback = false;
@@ -370,15 +370,14 @@ static THD_FUNCTION(packet_process_thread, arg)
    * Initialize timers for feedback and status reports. Start publishing status a 
    * little later so that we dont try to publish status and feedback at the same time.
    */
-  // chVTObjectInit(&status_task_vt);
-  // chVTObjectInit(&feedback_task_vt);
-  // chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
-  // chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
+  chVTObjectInit(&status_task_vt);
+  chVTObjectInit(&feedback_task_vt);
+  chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
 
 	while (1)
 	{
-		// i dont think we need to do this, sinze we want to continually send out feedback updates
-		//chEvtWaitAny((eventmask_t) 1);
+		chEvtWaitAny((eventmask_t) 1);
 
 		// send out feedback on every loop. If we are not receiving data, this will happen at about
 		// 50Hz
@@ -395,18 +394,18 @@ static THD_FUNCTION(packet_process_thread, arg)
 
 		if (estop)
 		{
-			mc_interface_set_brake_current(0);
+			// mc_interface_set_brake_current(0);
 		}
 		else if (!shouldMove())
 		{
-			mc_interface_brake_now();
+			// mc_interface_brake_now();
 		}
 		if (commandReceived)
 		{
-			// setCommand();
+			setCommand();
 
       // for testing purposes, just write the command back over UART
-      echoCommand();
+      // echoCommand();
 			commandReceived = false;
 		}
 
@@ -464,6 +463,8 @@ static THD_FUNCTION(packet_process_thread, arg)
 				serial_rx_read_pos = 0;
 			}
 		}
+
+    // chThdSleepMilliseconds(10);
 	}
 }
 
@@ -491,6 +492,7 @@ static void feedbackTaskCb(void* _)
   shouldSendFeedback = true;
   chSysLockFromISR();
   chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
 
@@ -500,6 +502,7 @@ static void statusTaskCb(void* _)
   shouldSendStatus = true;
   chSysLockFromISR();
   chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+  chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
 
@@ -550,27 +553,28 @@ void setCommand()
   switch (currentCommand.control) {
     case SPEED:
       fb.feedback.commanded_value = currentCommand.value_i;
+      echoCommand();
       mc_interface_set_pid_speed(currentCommand.value_i);
       break;
-    case CURRENT:
-      fb.feedback.commanded_value = currentCommand.value_f * 1000; 
-      mc_interface_set_current(currentCommand.value_f);
-      break;
-    case DUTY:
-      fb.feedback.commanded_value = currentCommand.value_f * 1000;
-      mc_interface_set_duty(currentCommand.value_f);
-      break;
-    case POSITION:
-      fb.feedback.commanded_value = currentCommand.value_i;
-      mc_interface_set_pid_pos(currentCommand.value_i);
-      break;
-    case SCALE_POS:
-      fb.feedback.commanded_value = currentCommand.value_f * 1000;
-      mc_interface_set_pid_pos(descale_position(currentCommand.value_f));
-      break;
-    case HOMING: 
-      fb.feedback.commanded_value = mc_interface_get_pid_pos_now();
-      homing_sequence();
+    // case CURRENT:
+    //   fb.feedback.commanded_value = currentCommand.value_f * 1000; 
+    //   mc_interface_set_current(currentCommand.value_f);
+    //   break;
+    // case DUTY:
+    //   fb.feedback.commanded_value = currentCommand.value_f * 1000;
+    //   mc_interface_set_duty(currentCommand.value_f);
+    //   break;
+    // case POSITION:
+    //   fb.feedback.commanded_value = currentCommand.value_i;
+    //   mc_interface_set_pid_pos(currentCommand.value_i);
+    //   break;
+    // case SCALE_POS:
+    //   fb.feedback.commanded_value = currentCommand.value_f * 1000;
+    //   mc_interface_set_pid_pos(descale_position(currentCommand.value_f));
+    //   break;
+    // case HOMING: 
+    //   fb.feedback.commanded_value = mc_interface_get_pid_pos_now();
+    //   homing_sequence();
     default:
       break;
   }
