@@ -6,7 +6,7 @@
 #ifdef ARDUINO
 #define ENUM_SIZE : uint8_t
 #else 
-#define ENUM_SIZE
+#define ENUM_SIZE : uint8_t
 #endif
 
 /***************************

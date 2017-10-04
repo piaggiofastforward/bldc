@@ -253,7 +253,8 @@ static void process_packet(unsigned char *data, unsigned int len)
 	(void)len;
   memcpy(request.request_bytes, data + 1, sizeof(mc_request));
 
-	switch (data[0])
+	// switch (data[0])
+  switch (request.request.type)
 	{
 		case CONFIG_READ:
 
@@ -261,6 +262,7 @@ static void process_packet(unsigned char *data, unsigned int len)
 			break;
 
 		case CONTROL_WRITE:
+      // echoCommand();
 			currentCommand = request.request;
 			commandReceived = true;
 			timeout_reset();
