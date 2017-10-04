@@ -70,8 +70,8 @@ void RosHandler::commandCallback(const vesc_driver::Command::ConstPtr &msg)
   // current commands are given as a float, while position commands are integers
   if (is_drive_motor_)
   {
-    request.request.control = CURRENT;
-    request.request.value_f = msg->target_cmd;
+    request.request.control = SPEED;
+    request.request.value_i = msg->target_cmd;
   }
   else
   {
@@ -116,6 +116,7 @@ void processFeedback(const mc_feedback &fb)
   msg.supply_voltage    = fb.supply_voltage;
   msg.supply_current    = fb.supply_current;
   msg.switch_flags      = fb.switch_flags;
+  msg.commanded_value   = fb.commanded_value;
 
   feedback_to_publish[fbBufWriteIndex] = msg;
   fbBufWriteIndex = (fbBufWriteIndex + 1) % FEEDBACK_BUF_SIZE;
