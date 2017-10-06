@@ -96,6 +96,7 @@ static volatile mc_configuration mcconf;
 /**
  * Forward declare various handlers.
  */
+static void initHardware();
 static void setHall(hall_table_t hall_table);
 static void setCommand(void);
 static void setParameter(enum mc_config_param param, float value);
@@ -151,7 +152,6 @@ static volatile bool packetLengthReceived = false;
 void echoCommand();
 void confirmationEcho();
 
-
 /**
  * Each pin can have at most one interrupt across GPIO sets.
  * Each index maps to a pin.
@@ -163,6 +163,13 @@ void confirmationEcho();
  * Pass the GPIO base (eg. GPIO_A) as the first argument to underlying EXTChannelConfig
  * struct, and the index in this EXTConfig instance represents the pin index.
  */
+#define ESTOP_PIN_INDEX  0
+#define FWDLIM_PIN_INDEX 4
+#define REVLIM_PIN_INDEX 5
+#define ESTOP_PORT       GPIOC
+#define FWDLIM_PORT      GPIOA
+#define REVLIM_PORT      GPIOA
+
 static const EXTConfig extcfg = {
   {
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_estop},
@@ -172,6 +179,13 @@ static const EXTConfig extcfg = {
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_fwd_limit},
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},
     {EXT_CH_MODE_DISABLED, NULL},   
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
@@ -354,23 +368,38 @@ static void send_packet(unsigned char *data, unsigned int len)
 	uartStartSend(&HW_UART_DEV, len, buffer);
 }
 
+/**
+ * Initialize estop, fwd_limit, rev_limit switches, and UART pins.
+ * Initialize EXT subsystem for hardware interrupts.
+ */
+static void initHardware()
+{
+  palSetPadMode(HW_UART_TX_PORT, HW_UART_TX_PIN, PAL_MODE_ALTERNATE(HW_UART_GPIO_AF) |
+      PAL_STM32_OSPEED_HIGHEST |
+      PAL_STM32_PUDR_PULLUP);
+  palSetPadMode(HW_UART_RX_PORT, HW_UART_RX_PIN, PAL_MODE_ALTERNATE(HW_UART_GPIO_AF) |
+      PAL_STM32_OSPEED_HIGHEST |
+      PAL_STM32_PUDR_PULLUP);
+
+  palClearPad(ESTOP_PORT, ESTOP_PIN_INDEX);
+  palClearPad(FWDLIM_PORT, FWDLIM_PIN_INDEX);
+  palClearPad(REVLIM_PORT, REVLIM_PIN_INDEX);
+  palSetPadMode(ESTOP_PORT, ESTOP_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
+  palSetPadMode(FWDLIM_PORT, FWDLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
+  palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
+
+  extStart(&EXTD1, &extcfg);
+  estop     = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX)   == PAL_LOW;
+  rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
+  fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
+}
+
 void app_uartcomm_start(void)
 {
 	packet_init(send_packet, process_packet, PACKET_HANDLER);
-
 	uartStart(&HW_UART_DEV, &uart_cfg);
-	palSetPadMode(HW_UART_TX_PORT, HW_UART_TX_PIN, PAL_MODE_ALTERNATE(HW_UART_GPIO_AF) |
-			PAL_STM32_OSPEED_HIGHEST |
-			PAL_STM32_PUDR_PULLUP);
-	palSetPadMode(HW_UART_RX_PORT, HW_UART_RX_PIN, PAL_MODE_ALTERNATE(HW_UART_GPIO_AF) |
-			PAL_STM32_OSPEED_HIGHEST |
-			PAL_STM32_PUDR_PULLUP);
+  initHardware();
 
-	extStart(&EXTD1, &extcfg);
-	estop = palReadPad(GPIOC, 5) == PAL_LOW;
-  rev_limit = palReadPad(GPIOA, 6) == PAL_LOW;
-	rev_limit = false;
-  fwd_limit = palReadPad(GPIOC, 0) == PAL_LOW;
   mcconf = *mc_interface_get_configuration();
   /* (void) getStringPotValue; */
   mc_interface_set_pid_pos_src(getStringPotValue);
@@ -608,7 +637,6 @@ void setCommand()
   switch (currentCommand.control) {
     case SPEED:
       fb.feedback.commanded_value = currentCommand.value_i;
-      // confirmationEcho();
       echoCommand();
       mc_interface_set_pid_speed(currentCommand.value_i);
       break;
@@ -727,7 +755,7 @@ void toggle_estop(EXTDriver *extp, expchannel_t channel)
 {
   (void) extp;
   (void) channel;
-  estop = palReadPad(GPIOC, 5) == PAL_LOW;
+  estop = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX) == PAL_LOW;
   // if (estop) {
   //   mc_interface_set_brake_current(0);
   // }
@@ -742,7 +770,7 @@ void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel)
 {
   (void) extp;
   (void) channel;
-  fwd_limit = palReadPad(GPIOC, 0) == PAL_HIGH;
+  fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
   if (fwd_limit) {
     if (!shouldMove()) {
       // mc_interface_brake_now();
@@ -760,7 +788,7 @@ void toggle_rev_limit(EXTDriver *extp, expchannel_t channel)
 {
   (void) extp;
   (void) channel;
-  rev_limit = palReadPad(GPIOA, 6) == PAL_HIGH;
+  rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
   if (rev_limit) {
     if (!shouldMove()) {
       // mc_interface_brake_now();
