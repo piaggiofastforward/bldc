@@ -41,6 +41,7 @@
 #define BAUDRATE					115200
 #define PACKET_HANDLER				1
 #define SERIAL_RX_BUFFER_SIZE		1024
+#define MAX_BYTES_PER_READ      15
 
 // Threads
 static THD_FUNCTION(packet_process_thread, arg);
@@ -51,7 +52,13 @@ static thread_t *process_tp;
 static uint8_t serial_rx_buffer[SERIAL_RX_BUFFER_SIZE];
 static unsigned int serial_rx_read_pos = 0;
 static unsigned int serial_rx_write_pos = 0;
-static unsigned int MAX_PACKET_LENGTH = 15;
+
+
+/** 
+ * Use this buffer when calling uartStartReceive(). After that returns (via calling rxEnd()), take the data out
+ * of this buffer and call packet_process_byte() on each byte.
+ */
+static uint8_t uart_receive_buffer[MAX_BYTES_PER_READ];
 static int is_running = 0;
 
 // functions that work with the packet interface
@@ -446,22 +453,13 @@ static THD_FUNCTION(packet_process_thread, arg)
 		// through uartStartReceive(), some (probably just 1) chars will end up in the serial_rx_buffer, 
 		// and the rest of the chars will end up in whatever buffer we pass to the function....
 
-
-		if (rxCharReceived)
-		{
-			uartStartReceive(&HW_UART_DEV, MAX_PACKET_LENGTH, serial_rx_buffer);
-			rxCharReceived = false;
-		}
-
 		// check to see if we received a full message...do we need to do anything in that situation?
-		if (rxEndReceived)
-		{
-      confirmationEcho();
-      rxEndReceived = false;
-		}
-		
 		while (serial_rx_read_pos != serial_rx_write_pos)
 		{
+
+      // since we will be receiving chars both through rxChar and rxEnd callbacks, we then need to
+      // piece together both of these buffers so that the packet interface processses the bytes
+      //
 
 			/**
 			 * This should be called on every received byte. When the packet interface detects the end of
@@ -473,6 +471,30 @@ static THD_FUNCTION(packet_process_thread, arg)
 				serial_rx_read_pos = 0;
 			}
 		}
+
+
+    if (rxCharReceived && HW_UART_DEV.rxstate == UART_RX_IDLE)
+    {
+      uartStartReceive(&HW_UART_DEV, MAX_BYTES_PER_READ, serial_rx_buffer);
+      rxCharReceived = false;
+    }
+
+
+    /**
+     * Handle the case where the uartStartReceive function returned (ie: the MAX_BYTES_PER_READ)
+     * was met) make sure we first process the byte received from rxChar callback (while statement above)
+     * and then process all of these bytes.
+     */
+
+    if (rxEndReceived)
+    {
+      for (int i = 0; i < MAX_BYTES_PER_READ; i++)
+      {
+        packet_process_byte(uart_receive_buffer[i], PACKET_HANDLER);
+      }
+      rxEndReceived = false;
+      confirmationEcho();
+    }
 
     // chThdSleepMilliseconds(1);
 	}
