@@ -51,7 +51,7 @@ static thread_t *process_tp;
 static uint8_t serial_rx_buffer[SERIAL_RX_BUFFER_SIZE];
 static unsigned int serial_rx_read_pos = 0;
 static unsigned int serial_rx_write_pos = 0;
-static unsigned int MAX_PACKET_LENGTH = 50;
+static unsigned int MAX_PACKET_LENGTH = 15;
 static int is_running = 0;
 
 // functions that work with the packet interface
@@ -102,6 +102,7 @@ void updateStatus(void);
 
 // for testing purposes
 void echoCommand();
+void confirmationEcho();
 
 
 /**
@@ -218,7 +219,8 @@ static void rxchar(UARTDriver *uartp, uint16_t c)
 }
 
 /*
- * This callback is invoked when a receive buffer has been completely written.
+ * This callback is invoked when the receive buffer is
+ * completely filled!!!
  */
 static void rxend(UARTDriver *uartp)
 {
@@ -253,32 +255,32 @@ static void process_packet(unsigned char *data, unsigned int len)
 	(void)len;
   memcpy(request.request_bytes, data + 1, sizeof(mc_request));
 
-	// switch (data[0])
-  switch (request.request.type)
-	{
-		case CONFIG_READ:
+	// // switch (data[0])
+ //  switch (request.request.type)
+	// {
+	// 	case CONFIG_READ:
 
-			// need to implement
-			break;
+	// 		// need to implement
+	// 		break;
 
-		case CONTROL_WRITE:
-      // echoCommand();
-			currentCommand = request.request;
-			commandReceived = true;
-			timeout_reset();
-			break;
+	// 	case CONTROL_WRITE:
+ //      // echoCommand();
+	// 		currentCommand = request.request;
+	// 		commandReceived = true;
+	// 		timeout_reset();
+	// 		break;
 
-		case CONFIG_WRITE:
-			if (request.request.param == HALL_TABLE)
-				setHall(request.request.value_hall);
-			else
-				setParameter(request.request.param, request.request.value_f);
-			updateConfigReceived = true;
-			break;
+	// 	case CONFIG_WRITE:
+	// 		if (request.request.param == HALL_TABLE)
+	// 			setHall(request.request.value_hall);
+	// 		else
+	// 			setParameter(request.request.param, request.request.value_f);
+	// 		updateConfigReceived = true;
+	// 		break;
 
-		default:
-			break;
-	}
+	// 	default:
+	// 		break;
+	// }
 }
 
 /**
@@ -372,14 +374,14 @@ static THD_FUNCTION(packet_process_thread, arg)
    * Initialize timers for feedback and status reports. Start publishing status a 
    * little later so that we dont try to publish status and feedback at the same time.
    */
-  chVTObjectInit(&status_task_vt);
-  chVTObjectInit(&feedback_task_vt);
-  chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
-  chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
+  // chVTObjectInit(&status_task_vt);
+  // chVTObjectInit(&feedback_task_vt);
+  // chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  // chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
 
 	while (1)
 	{
-		chEvtWaitAny((eventmask_t) 1);
+		// chEvtWaitAny((eventmask_t) 1);
 
 		// send out feedback on every loop. If we are not receiving data, this will happen at about
 		// 50Hz
@@ -440,16 +442,17 @@ static THD_FUNCTION(packet_process_thread, arg)
 		// and the rest of the chars will end up in whatever buffer we pass to the function....
 
 
-		// if (rxCharReceived)
-		// {
-		// 	uartStartReceive(&HW_UART_DEV, MAX_PACKET_LENGTH, serial_rx_buffer);
-		// 	rxCharReceived = false;
-		// }
+		if (rxCharReceived)
+		{
+			uartStartReceive(&HW_UART_DEV, MAX_PACKET_LENGTH, serial_rx_buffer);
+			rxCharReceived = false;
+		}
 
 		// check to see if we received a full message...do we need to do anything in that situation?
 		if (rxEndReceived)
 		{
-			
+      confirmationEcho();
+      rxEndReceived = false;
 		}
 		
 		while (serial_rx_read_pos != serial_rx_write_pos)
@@ -466,7 +469,7 @@ static THD_FUNCTION(packet_process_thread, arg)
 			}
 		}
 
-    // chThdSleepMilliseconds(10);
+    chThdSleepMilliseconds(1);
 	}
 }
 
@@ -486,6 +489,12 @@ void echoCommand()
   data[0] = CONTROL_WRITE;
   memcpy(data + 1, request.request_bytes, sizeof(mc_request));
   send_packet_wrapper(data, sizeof(data)); 
+}
+
+void confirmationEcho()
+{
+  uint8_t confirmationBuf[3] = {0, 0, 0};
+  send_packet_wrapper(confirmationBuf, 3);
 }
 
 static void feedbackTaskCb(void* _)
