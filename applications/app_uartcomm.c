@@ -226,6 +226,11 @@ static void rxend(UARTDriver *uartp)
 {
 	(void)uartp;
 	rxEndReceived = true;
+  chSysLockFromISR();
+
+  // add event flags to process_tp, probably so we can exit the chEventAwaitAny call...?
+  chEvtSignalI(process_tp, (eventmask_t) 1);
+  chSysUnlockFromISR();
 }
 
 /*
@@ -381,7 +386,7 @@ static THD_FUNCTION(packet_process_thread, arg)
 
 	while (1)
 	{
-		// chEvtWaitAny((eventmask_t) 1);
+		chEvtWaitAny((eventmask_t) 1);
 
 		// send out feedback on every loop. If we are not receiving data, this will happen at about
 		// 50Hz
@@ -469,7 +474,7 @@ static THD_FUNCTION(packet_process_thread, arg)
 			}
 		}
 
-    chThdSleepMilliseconds(1);
+    // chThdSleepMilliseconds(1);
 	}
 }
 
