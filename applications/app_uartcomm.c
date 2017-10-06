@@ -40,8 +40,8 @@
 // Settings
 #define BAUDRATE					115200
 #define PACKET_HANDLER				1
-#define SERIAL_RX_BUFFER_SIZE		1024
-#define MAX_BYTES_PER_READ      15
+#define SERIAL_RX_BUFFER_SIZE		128
+#define MAX_BYTES_PER_READ      128
 
 // Threads
 static THD_FUNCTION(packet_process_thread, arg);
@@ -110,6 +110,13 @@ void updateStatus(void);
 // for testing purposes
 void echoCommand();
 void confirmationEcho();
+
+static volatile bool startByteReceived = false;
+static volatile bool packetLengthReceived = false;
+
+
+// might need to change this later for REALLY BIG packets
+static volatile uint8_t packetLength = 0;
 
 
 /**
@@ -212,7 +219,18 @@ static void rxchar(UARTDriver *uartp, uint16_t c)
 {
 	(void)uartp;
 	serial_rx_buffer[serial_rx_write_pos++] = c;
-	rxCharReceived = true;
+
+  // this is the start byte
+  if ((uint8_t)c == (uint8_t)2)
+  {
+    startByteReceived = true;
+  }
+  else if (startByteReceived)
+  {
+    packetLength = c;
+    packetLength += 3;  // 2 CRC bytes, checksum at end of packet
+    packetLengthReceived = true;
+  }
 
 	if (serial_rx_write_pos == SERIAL_RX_BUFFER_SIZE) {
 		serial_rx_write_pos = 0;
@@ -268,31 +286,32 @@ static void process_packet(unsigned char *data, unsigned int len)
   memcpy(request.request_bytes, data + 1, sizeof(mc_request));
 
 	// // switch (data[0])
- //  switch (request.request.type)
-	// {
-	// 	case CONFIG_READ:
+  switch (request.request.type)
+	{
+		case CONFIG_READ:
 
-	// 		// need to implement
-	// 		break;
+			// need to implement
+			break;
 
-	// 	case CONTROL_WRITE:
- //      // echoCommand();
-	// 		currentCommand = request.request;
-	// 		commandReceived = true;
-	// 		timeout_reset();
-	// 		break;
+		case CONTROL_WRITE:
+      // echoCommand();
+      // confirmationEcho();
+			currentCommand = request.request;
+			commandReceived = true;
+			timeout_reset();
+			break;
 
-	// 	case CONFIG_WRITE:
-	// 		if (request.request.param == HALL_TABLE)
-	// 			setHall(request.request.value_hall);
-	// 		else
-	// 			setParameter(request.request.param, request.request.value_f);
-	// 		updateConfigReceived = true;
-	// 		break;
+		case CONFIG_WRITE:
+			if (request.request.param == HALL_TABLE)
+				setHall(request.request.value_hall);
+			else
+				setParameter(request.request.param, request.request.value_f);
+			updateConfigReceived = true;
+			break;
 
-	// 	default:
-	// 		break;
-	// }
+		default:
+			break;
+	}
 }
 
 /**
@@ -473,10 +492,10 @@ static THD_FUNCTION(packet_process_thread, arg)
 		}
 
 
-    if (rxCharReceived && HW_UART_DEV.rxstate == UART_RX_IDLE)
+    if (packetLengthReceived) //&& HW_UART_DEV.rxstate == UART_RX_IDLE)
     {
-      uartStartReceive(&HW_UART_DEV, MAX_BYTES_PER_READ, serial_rx_buffer);
-      rxCharReceived = false;
+      uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
+      packetLengthReceived = false;
     }
 
 
@@ -488,12 +507,11 @@ static THD_FUNCTION(packet_process_thread, arg)
 
     if (rxEndReceived)
     {
-      for (int i = 0; i < MAX_BYTES_PER_READ; i++)
+      for (int i = 0; i < packetLength; i++)
       {
         packet_process_byte(uart_receive_buffer[i], PACKET_HANDLER);
       }
       rxEndReceived = false;
-      confirmationEcho();
     }
 
     // chThdSleepMilliseconds(1);
@@ -591,8 +609,9 @@ void setCommand()
   switch (currentCommand.control) {
     case SPEED:
       fb.feedback.commanded_value = currentCommand.value_i;
+      // confirmationEcho();
       echoCommand();
-      mc_interface_set_pid_speed(currentCommand.value_i);
+      // mc_interface_set_pid_speed(currentCommand.value_i);
       break;
     // case CURRENT:
     //   fb.feedback.commanded_value = currentCommand.value_f * 1000; 
