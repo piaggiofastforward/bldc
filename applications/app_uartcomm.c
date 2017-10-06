@@ -145,7 +145,6 @@ static volatile uint8_t packetLength = 0;
 static volatile bool startByteReceived = false;
 static volatile bool packetLengthReceived = false;
 
-
 /**
  * For testing purposes!
  */
@@ -170,9 +169,9 @@ static const EXTConfig extcfg = {
     {EXT_CH_MODE_DISABLED, NULL},    
     {EXT_CH_MODE_DISABLED, NULL},    
     {EXT_CH_MODE_DISABLED, NULL},   
-    {EXT_CH_MODE_DISABLED, NULL},   
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_fwd_limit},
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},
+    {EXT_CH_MODE_DISABLED, NULL},   
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
@@ -368,7 +367,7 @@ void app_uartcomm_start(void)
 			PAL_STM32_PUDR_PULLUP);
 
 	extStart(&EXTD1, &extcfg);
-	estop = palReadPad(GPIOA, 5) == PAL_LOW;
+	estop = palReadPad(GPIOC, 5) == PAL_LOW;
   rev_limit = palReadPad(GPIOA, 6) == PAL_LOW;
 	rev_limit = false;
   fwd_limit = palReadPad(GPIOC, 0) == PAL_LOW;
@@ -499,7 +498,8 @@ static THD_FUNCTION(packet_process_thread, arg)
 		{
 			// mc_interface_brake_now();
 		}
-		if (commandReceived)
+
+    if (commandReceived)
 		{
 			setCommand();
 			commandReceived = false;
@@ -610,7 +610,7 @@ void setCommand()
       fb.feedback.commanded_value = currentCommand.value_i;
       // confirmationEcho();
       echoCommand();
-      // mc_interface_set_pid_speed(currentCommand.value_i);
+      mc_interface_set_pid_speed(currentCommand.value_i);
       break;
     // case CURRENT:
     //   fb.feedback.commanded_value = currentCommand.value_f * 1000; 
@@ -727,10 +727,10 @@ void toggle_estop(EXTDriver *extp, expchannel_t channel)
 {
   (void) extp;
   (void) channel;
-  estop = palReadPad(GPIOA, 5) == PAL_LOW;
-  if (estop) {
-    mc_interface_set_brake_current(0);
-  }
+  estop = palReadPad(GPIOC, 5) == PAL_LOW;
+  // if (estop) {
+  //   mc_interface_set_brake_current(0);
+  // }
 }
 
 /*
@@ -745,7 +745,7 @@ void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel)
   fwd_limit = palReadPad(GPIOC, 0) == PAL_HIGH;
   if (fwd_limit) {
     if (!shouldMove()) {
-      mc_interface_brake_now();
+      // mc_interface_brake_now();
     }
     max_tacho = mc_interface_get_tachometer_value(false);
   }
@@ -763,7 +763,7 @@ void toggle_rev_limit(EXTDriver *extp, expchannel_t channel)
   rev_limit = palReadPad(GPIOA, 6) == PAL_HIGH;
   if (rev_limit) {
     if (!shouldMove()) {
-      mc_interface_brake_now();
+      // mc_interface_brake_now();
     }
     min_tacho = mc_interface_get_tachometer_value(false);
   }

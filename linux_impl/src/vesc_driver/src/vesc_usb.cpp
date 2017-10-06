@@ -9,7 +9,6 @@
 extern "C"
 {
   #include "vesc_driver/platform_flags.h"
-  // #include "vesc_driver/bldc_interface.h"
   #include "vesc_driver/packet.h"
 }
 
@@ -39,7 +38,6 @@ static serial::Serial ser;
 static int initSerial(const char* port)
 {
 #if PLATFORM_IS_LINUX
-  // initialize USB port
   ser.setPort(port);
   ser.setBaudrate(115200);
   serial::Timeout to(serial::Timeout::simpleTimeout(500));
@@ -61,7 +59,6 @@ static int initSerial(const char* port)
 
 static void serialSendPacket(uint8_t *data, unsigned int length)
 {
-  ROS_WARN_STREAM("writing messages to VESC...length: " << length);
   size_t bytes_written = ser.write((const uint8_t*)data, length);
   ROS_WARN_STREAM("bytes written: " << bytes_written);
 }
@@ -82,6 +79,9 @@ static void serialProcessPacket(unsigned char *data, unsigned int length)
   mc_request_union request;
   float value;
   char msg[80];
+
+  // ROS_WARN("got some data");
+
   switch (data[0])
   {
     case FEEDBACK_DATA:
@@ -121,12 +121,12 @@ static void serialProcessPacket(unsigned char *data, unsigned int length)
         case SCALE_POS:
           value = request.request.value_f;
       }
-      snprintf(msg, sizeof msg, "Echo-> type: %d, value: %f, control_mode: %d", 
+      snprintf(msg, sizeof msg, "Echo-> type: %d, value: %f, control_mode: %d\n\n",
         request.request.type, value, request.request.control);
       ROS_WARN(msg);
       break;
     default:
-      ROS_WARN("default case");
+      ROS_WARN("default case\n\n");
 
       break;
   }
@@ -161,9 +161,6 @@ int initComm(feedback_callback_t feedback_cb, status_callback_t status_cb, const
   feedbackCallback = feedback_cb;
   statusCallback = status_cb;
   return 0;
-
-  //bldc_interface_init(sendPacket);
-  // bldc_interface_set_rx_value_func(feedback_cb);
 }
 
 void byteReceived(uint8_t b)
