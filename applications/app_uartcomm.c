@@ -470,6 +470,11 @@ static THD_FUNCTION(packet_process_thread, arg)
      * 2) Through calls to uartReceive(). This will ensure a "proper" receiving of data - 
      *    the rxchar() callback will not be invoked. Instead, rxEnd() will be invoked when the number of bytes
      *    specified in the call to uartStartReceive() is reached.
+     *
+     *  "uartReceiving" will be set to true just after uartStartReceive() is called, and will be set back to false after
+     *  all of the bytes received in the uart_receive_buffer are processed via packet_process_byte(). This guards against
+     *  the condition where, at high command speeds, we process a byte received through rxChar() before processing all
+     *  of the bytes received through uartStartReceive(). 
      */
 
     while (!uartReceiving && (serial_rx_read_pos != serial_rx_write_pos))
@@ -506,14 +511,16 @@ static THD_FUNCTION(packet_process_thread, arg)
      * If we received the packetLength, use uartStartReceive() to receive the rest of the bytes. When
      * the specified number of bytes is read, rxEnd() will be invoked, setting rxEndReceived = true
      */
-    if (packetLengthReceived) //&& HW_UART_DEV.rxstate == UART_RX_IDLE)
+    if (packetLengthReceived)
     {
       uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
       uartReceiving = true;
       packetLengthReceived = false;
     }
 
-
+    /**
+     * These flags will be set in timer interrupts at rates configurable via FB_RATE_MS and STATUS_RATE_MS
+     */
 		if (shouldSendFeedback)
     {
       sendFeedback();
@@ -525,8 +532,12 @@ static THD_FUNCTION(packet_process_thread, arg)
       shouldSendStatus = false;
     }
 
+    /**
+     * TODO: proper handling of estop (brake? or just set command to 0?)
+     */
 		if (estop)
 		{
+      mcpwm_foc_stop_pwm();
 			// mc_interface_set_brake_current(0);
 		}
 		else if (!shouldMove())
@@ -534,7 +545,7 @@ static THD_FUNCTION(packet_process_thread, arg)
 			// mc_interface_brake_now();
 		}
 
-    if (commandReceived)
+    else if (commandReceived)
 		{
 			setCommand();
 			commandReceived = false;
@@ -576,6 +587,9 @@ void confirmationEcho()
   send_packet_wrapper(confirmationBuf, 3);
 }
 
+/**
+ * Set flags to indicate that we should publish feedback or status, handle in main thread.
+ */
 static void feedbackTaskCb(void* _)
 {
   (void)_;
@@ -606,7 +620,6 @@ void updateFeedback(void)
   fb.feedback.measured_position = mc_interface_get_pid_pos_now();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
-  // fb.feedback.switch_flags      = ST2MS(chVTGetSystemTimeX());
   fb.feedback.switch_flags      = (estop << 2) | (rev_limit << 1) | (fwd_limit); 
 }
 
@@ -643,7 +656,7 @@ void setCommand()
   switch (currentCommand.control) {
     case SPEED:
       fb.feedback.commanded_value = currentCommand.value_i;
-      echoCommand();
+      // echoCommand();
       mc_interface_set_pid_speed(currentCommand.value_i);
       break;
     // case CURRENT:
