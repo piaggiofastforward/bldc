@@ -146,6 +146,9 @@ static volatile uint8_t packetLength = 0;
 static volatile bool startByteReceived = false;
 static volatile bool packetLengthReceived = false;
 
+// set this to true after calling uartStartReceive(), set back to false in rxEnd()
+static volatile bool uartReceiving = false;
+
 /**
  * For testing purposes!
  */
@@ -469,7 +472,7 @@ static THD_FUNCTION(packet_process_thread, arg)
      *    specified in the call to uartStartReceive() is reached.
      */
 
-    while (serial_rx_read_pos != serial_rx_write_pos)
+    while (!uartReceiving && (serial_rx_read_pos != serial_rx_write_pos))
     {
 
       /**
@@ -496,6 +499,7 @@ static THD_FUNCTION(packet_process_thread, arg)
         packet_process_byte(uart_receive_buffer[i], PACKET_HANDLER);
       }
       rxEndReceived = false;
+      uartReceiving = false;
     }
 
     /**
@@ -505,6 +509,7 @@ static THD_FUNCTION(packet_process_thread, arg)
     if (packetLengthReceived) //&& HW_UART_DEV.rxstate == UART_RX_IDLE)
     {
       uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
+      uartReceiving = true;
       packetLengthReceived = false;
     }
 
@@ -542,7 +547,6 @@ static THD_FUNCTION(packet_process_thread, arg)
 			conf_general_store_mc_configuration((mc_configuration *) &mcconf);
 			updateConfigReceived = false;
 		}
-    // chThdSleepMilliseconds(5);
 	}
 }
 
