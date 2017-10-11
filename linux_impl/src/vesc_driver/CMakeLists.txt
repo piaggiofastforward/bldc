@@ -134,7 +134,6 @@ include_directories(
 add_executable(
 	vesc_driver_node
 	src/main.cpp
-	src/bldc_interface.c
 	src/buffer.c
 	src/crc.c
 	src/packet.c

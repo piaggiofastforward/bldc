@@ -3,11 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef ARDUINO
 #define ENUM_SIZE : uint8_t
-#else 
-#define ENUM_SIZE
-#endif
 
 /***************************
  * VESC REQUEST DATATYPES  *

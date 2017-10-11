@@ -40,21 +40,34 @@
 // Settings
 #define BAUDRATE					115200
 #define PACKET_HANDLER				1
-#define SERIAL_RX_BUFFER_SIZE		1024
+#define SERIAL_RX_BUFFER_SIZE		128
+#define MAX_BYTES_PER_READ      128
 
 // Threads
 static THD_FUNCTION(packet_process_thread, arg);
 static THD_WORKING_AREA(packet_process_thread_wa, 4096);
 static thread_t *process_tp;
 
-// Variables
+/**
+ * This buffer will be used for characters received through rxChar(). We should only be receiving the first 2 or 3 bytes
+ * of a packet this way - when we parse the packet length, receive the rest of the data through uartStartReceive().
+ */
 static uint8_t serial_rx_buffer[SERIAL_RX_BUFFER_SIZE];
 static unsigned int serial_rx_read_pos = 0;
 static unsigned int serial_rx_write_pos = 0;
-static unsigned int MAX_PACKET_LENGTH = 50;
+
+
+/** 
+ * Use this buffer when calling uartStartReceive(). After that returns (via rxEnd()), take the data out
+ * of this buffer and call packet_process_byte() on each byte.
+ */
+static uint8_t uart_receive_buffer[MAX_BYTES_PER_READ];
 static int is_running = 0;
 
-// functions that work with the packet interface
+/**
+ * Functions that work with the packet interface, which conveniently wraps a raw data buffer in
+ * a start byte, packet length, 2 CRC, and stop bytes.
+ */
 static void process_packet(unsigned char *data, unsigned int len);
 static void send_packet_wrapper(unsigned char *data, unsigned int len);
 static void send_packet(unsigned char *data, unsigned int len);
@@ -62,43 +75,53 @@ static void send_packet(unsigned char *data, unsigned int len);
 
 // state variables
 volatile bool rxEndReceived        = false;
-volatile bool rxCharReceived       = false;
+// volatile bool rxCharReceived       = false;
 volatile bool commandReceived      = false;
 volatile bool updateConfigReceived = false;
-static volatile int32_t min_tacho = INT_MAX;
-static volatile int32_t max_tacho = INT_MIN;
 static volatile bool estop = true;
 static volatile bool rev_limit = false;
 static volatile bool fwd_limit = false;
+static volatile int32_t min_tacho = INT_MAX;
+static volatile int32_t max_tacho = INT_MIN;
 
-
-// structs to hold transaction data
-static mc_feedback_union fb;
-static mc_status_union status;
-static mc_request_union request;
+/**
+ * Structs to hold various transaction data.
+ */
+static volatile mc_feedback_union fb;
+static volatile mc_status_union status;
+static volatile mc_request_union request;
 static volatile mc_request currentCommand = {{0}, {0}, 0};
 static volatile mc_configuration mcconf;
 
-// forward declarations of handler functions
+/**
+ * Forward declare various handlers.
+ */
+static void initHardware();
 static void setHall(hall_table_t hall_table);
 static void setCommand(void);
 static void setParameter(enum mc_config_param param, float value);
 static int getStringPotValue(void);
+volatile float *getParamPtr(enum mc_config_param param);
+int32_t descale_position(float pos);
+bool shouldMove(void);
+void homing_sequence(void);
+void toggle_estop(EXTDriver *extp, expchannel_t channel); 
+void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel);
+void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
 
-// feedback and status publishing functions, as well as virtual timers for
-// executing these tasks
+
+/**
+ * Use timer interrupts to trigger status and feedback publishing at specified intervals. Set flags in the
+ * interrupts, handle in the main thread.
+ */
 static virtual_timer_t feedback_task_vt;
 static virtual_timer_t status_task_vt;
-
-// use so that we dont publish feedback and status simultaneously
 static void feedbackTaskCb(void* _);
 static void statusTaskCb(void* _);
-
 void sendFeedback(void);
 void updateFeedback(void);
 void sendStatus(void);
 void updateStatus(void);
-
 
 /**
  * The functions that set the flags which prompt us to write status/feedback in the
@@ -106,22 +129,31 @@ void updateStatus(void);
  * below the desired write rate since there is a small latency between the time the flag
  * is set at the time at which the entire desired packet is sent out.
  */ 
-#define FB_RATE_MS     18  // 50Hz
-#define STATUS_RATE_MS 48  // 20Hz
+#define FB_RATE_MS     20  // 50Hz
+#define STATUS_RATE_MS 50  // 20Hz
 #define STATUS_INITIAL_DELAY ((STATUS_RATE_MS - FB_RATE_MS) / 2)
 volatile bool shouldSendStatus   = false;
 volatile bool shouldSendFeedback = false;
 
-volatile float *getParamPtr(enum mc_config_param param);
 
-int32_t descale_position(float pos);
-bool shouldMove(void);
-void homing_sequence(void);
+/**
+ * State variables for coordinating cahracters received through rxChar() and through uartStartReceive(),
+ * to ensure that we process bytes in the actual order that we received them.
+ */ 
 
-void toggle_estop(EXTDriver *extp, expchannel_t channel); 
-void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel);
-void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
+// might need to change this later for REALLY BIG packets (ie: packets larger than 255)
+static volatile uint8_t packetLength = 0;
+static volatile bool startByteReceived = false;
+static volatile bool packetLengthReceived = false;
 
+// set this to true after calling uartStartReceive(), set back to false in rxEnd()
+static volatile bool uartReceiving = false;
+
+/**
+ * For testing purposes!
+ */
+void echoCommand();
+void confirmationEcho();
 
 /**
  * Each pin can have at most one interrupt across GPIO sets.
@@ -134,15 +166,29 @@ void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
  * Pass the GPIO base (eg. GPIO_A) as the first argument to underlying EXTChannelConfig
  * struct, and the index in this EXTConfig instance represents the pin index.
  */
+#define ESTOP_PIN_INDEX  0
+#define FWDLIM_PIN_INDEX 4
+#define REVLIM_PIN_INDEX 5
+#define ESTOP_PORT       GPIOC
+#define FWDLIM_PORT      GPIOA
+#define REVLIM_PORT      GPIOA
+
 static const EXTConfig extcfg = {
   {
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_estop},
     {EXT_CH_MODE_DISABLED, NULL},    
     {EXT_CH_MODE_DISABLED, NULL},    
     {EXT_CH_MODE_DISABLED, NULL},   
-    {EXT_CH_MODE_DISABLED, NULL},   
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_fwd_limit},
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},
+    {EXT_CH_MODE_DISABLED, NULL},   
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
+    {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
@@ -193,33 +239,54 @@ static void rxerr(UARTDriver *uartp, uartflags_t e)
  * This callback is invoked when a character is received but the application
  * was not ready to receive it, the character is passed as parameter.
  *
- * If this happens, we want to prepare the driver to properly receive the rest
- * of the message.
+ * In general, we will allow the first two (or three) characters to trigger this callback. 
+ *
+ *    If the start byte == 2, that means the SECOND byte is the packet length.
+ *    If the start byte == 3, that means the SECOND AND THIRD bytes are the packet length (len > 255)
+ *
+ * Store the packetLength and use this in a later call to uartStartReceive() to ensure that the rxEnd()
+ * callback is invoked when we receive exactly the amount of bytes that are in an incoming message.
  */
 static void rxchar(UARTDriver *uartp, uint16_t c)
 {
 	(void)uartp;
 	serial_rx_buffer[serial_rx_write_pos++] = c;
-	rxCharReceived = true;
+
+  // this is the start byte for messages with len < 255
+  if ((uint8_t)c == (uint8_t)2)
+  {
+    startByteReceived = true;
+  }
+
+  // store the packetLength, accounting for 2 CRC bytes and a stop byte
+  if (startByteReceived)
+  {
+    packetLength = c;
+    packetLength += 3;
+    packetLengthReceived = true;
+    startByteReceived = false;
+  }
 
 	if (serial_rx_write_pos == SERIAL_RX_BUFFER_SIZE) {
 		serial_rx_write_pos = 0;
 	}
 
 	chSysLockFromISR();
-
-	// add event flags to process_tp, probably so we can exit the chEventAwaitAny call...?
 	chEvtSignalI(process_tp, (eventmask_t) 1);
 	chSysUnlockFromISR();
 }
 
 /*
- * This callback is invoked when a receive buffer has been completely written.
+ * This callback is invoked when the number of bytes passed to uartStartReceive() are read.
+ * Make sure to process the bytes received through rxChar() before processing these bytes...
  */
 static void rxend(UARTDriver *uartp)
 {
 	(void)uartp;
 	rxEndReceived = true;
+  chSysLockFromISR();
+  chEvtSignalI(process_tp, (eventmask_t) 1);
+  chSysUnlockFromISR();
 }
 
 /*
@@ -247,9 +314,10 @@ static UARTConfig uart_cfg = {
 static void process_packet(unsigned char *data, unsigned int len)
 {
 	(void)len;
-	memcpy(request.request_bytes, data, sizeof(request.request_bytes));
+  memcpy(request.request_bytes, data + 1, sizeof(mc_request));
 
-	switch (request.request.type)
+	// // switch (data[0])
+  switch (request.request.type)
 	{
 		case CONFIG_READ:
 
@@ -304,23 +372,38 @@ static void send_packet(unsigned char *data, unsigned int len)
 	uartStartSend(&HW_UART_DEV, len, buffer);
 }
 
+/**
+ * Initialize estop, fwd_limit, rev_limit switches, and UART pins.
+ * Initialize EXT subsystem for hardware interrupts.
+ */
+static void initHardware()
+{
+  palSetPadMode(HW_UART_TX_PORT, HW_UART_TX_PIN, PAL_MODE_ALTERNATE(HW_UART_GPIO_AF) |
+      PAL_STM32_OSPEED_HIGHEST |
+      PAL_STM32_PUDR_PULLUP);
+  palSetPadMode(HW_UART_RX_PORT, HW_UART_RX_PIN, PAL_MODE_ALTERNATE(HW_UART_GPIO_AF) |
+      PAL_STM32_OSPEED_HIGHEST |
+      PAL_STM32_PUDR_PULLUP);
+
+  palClearPad(ESTOP_PORT, ESTOP_PIN_INDEX);
+  palClearPad(FWDLIM_PORT, FWDLIM_PIN_INDEX);
+  palClearPad(REVLIM_PORT, REVLIM_PIN_INDEX);
+  palSetPadMode(ESTOP_PORT, ESTOP_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
+  palSetPadMode(FWDLIM_PORT, FWDLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
+  palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
+
+  extStart(&EXTD1, &extcfg);
+  estop     = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX)   == PAL_LOW;
+  rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
+  fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
+}
+
 void app_uartcomm_start(void)
 {
 	packet_init(send_packet, process_packet, PACKET_HANDLER);
-
 	uartStart(&HW_UART_DEV, &uart_cfg);
-	palSetPadMode(HW_UART_TX_PORT, HW_UART_TX_PIN, PAL_MODE_ALTERNATE(HW_UART_GPIO_AF) |
-			PAL_STM32_OSPEED_HIGHEST |
-			PAL_STM32_PUDR_PULLUP);
-	palSetPadMode(HW_UART_RX_PORT, HW_UART_RX_PIN, PAL_MODE_ALTERNATE(HW_UART_GPIO_AF) |
-			PAL_STM32_OSPEED_HIGHEST |
-			PAL_STM32_PUDR_PULLUP);
+  initHardware();
 
-	extStart(&EXTD1, &extcfg);
-	estop = palReadPad(GPIOA, 5) == PAL_LOW;
-  rev_limit = palReadPad(GPIOA, 6) == PAL_LOW;
-	rev_limit = false;
-  fwd_limit = palReadPad(GPIOC, 0) == PAL_LOW;
   mcconf = *mc_interface_get_configuration();
   /* (void) getStringPotValue; */
   mc_interface_set_pid_pos_src(getStringPotValue);
@@ -363,8 +446,9 @@ static THD_FUNCTION(packet_process_thread, arg)
 	process_tp = chThdGetSelfX();
 
   /**
-   * Initialize timers for feedback and status reports. Start publishing status a 
-   * little later so that we dont try to publish status and feedback at the same time.
+   * Initialize timers for feedback and status reports. These timers will set the shouldSendFeedback 
+   * and shouldSendStatus flags in an interrupt context, and we will do the actual data transmission
+   * in the main thread.
    */
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
@@ -373,11 +457,70 @@ static THD_FUNCTION(packet_process_thread, arg)
 
 	while (1)
 	{
-		// i dont think we need to do this, sinze we want to continually send out feedback updates
-		//chEvtWaitAny((eventmask_t) 1);
+		chEvtWaitAny((eventmask_t) 1);
 
-		// send out feedback on every loop. If we are not receiving data, this will happen at about
-		// 50Hz
+    /**
+     * We can receive data in 2 ways:
+     * 
+     * 1) Through the rxChar() interrupt above. This will be called when we receive a character
+     *    but the application wasnt ready for it. In this case, we want to prepare the UARTDriver
+     *    object to correctly receive the rest of the packet (as opposed to interrupting and calling rxChar() on
+     *    every single received character), placing all the data in the uart_receive_buffer.
+     *
+     * 2) Through calls to uartReceive(). This will ensure a "proper" receiving of data - 
+     *    the rxchar() callback will not be invoked. Instead, rxEnd() will be invoked when the number of bytes
+     *    specified in the call to uartStartReceive() is reached.
+     *
+     *  "uartReceiving" will be set to true just after uartStartReceive() is called, and will be set back to false after
+     *  all of the bytes received in the uart_receive_buffer are processed via packet_process_byte(). This guards against
+     *  the condition where, at high command speeds, we process a byte received through rxChar() before processing all
+     *  of the bytes received through uartStartReceive(). 
+     */
+
+    while (!uartReceiving && (serial_rx_read_pos != serial_rx_write_pos))
+    {
+
+      /**
+       * This should be called on every received byte. When the packet interface detects the end of
+       * a packet, it will call its process_func - in our case, this will be process_packet() above. 
+       */
+      packet_process_byte(serial_rx_buffer[serial_rx_read_pos++], PACKET_HANDLER);
+
+      if (serial_rx_read_pos == SERIAL_RX_BUFFER_SIZE) {
+        serial_rx_read_pos = 0;
+      }
+    }
+
+    /**
+     * Handle the case where the uartStartReceive function returned (ie: the MAX_BYTES_PER_READ)
+     * was met) make sure we first process the bytes received from rxChar() (while statement above)
+     * and then process all of these bytes so that we call packet_process_byte() in the correct sequence.
+     */
+
+    if (rxEndReceived)
+    {
+      for (int i = 0; i < packetLength; i++)
+      {
+        packet_process_byte(uart_receive_buffer[i], PACKET_HANDLER);
+      }
+      rxEndReceived = false;
+      uartReceiving = false;
+    }
+
+    /**
+     * If we received the packetLength, use uartStartReceive() to receive the rest of the bytes. When
+     * the specified number of bytes is read, rxEnd() will be invoked, setting rxEndReceived = true
+     */
+    if (packetLengthReceived)
+    {
+      uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
+      uartReceiving = true;
+      packetLengthReceived = false;
+    }
+
+    /**
+     * These flags will be set in timer interrupts at rates configurable via FB_RATE_MS and STATUS_RATE_MS
+     */
 		if (shouldSendFeedback)
     {
       sendFeedback();
@@ -389,15 +532,20 @@ static THD_FUNCTION(packet_process_thread, arg)
       shouldSendStatus = false;
     }
 
+    /**
+     * TODO: proper handling of estop (brake? or just set command to 0?)
+     */
 		if (estop)
 		{
-			mc_interface_set_brake_current(0);
+      mcpwm_foc_stop_pwm();
+			// mc_interface_set_brake_current(0);
 		}
 		else if (!shouldMove())
 		{
-			mc_interface_brake_now();
+			// mc_interface_brake_now();
 		}
-		else if (commandReceived)
+
+    else if (commandReceived)
 		{
 			setCommand();
 			commandReceived = false;
@@ -410,53 +558,6 @@ static THD_FUNCTION(packet_process_thread, arg)
 			conf_general_store_mc_configuration((mc_configuration *) &mcconf);
 			updateConfigReceived = false;
 		}
-
-		/**
-		 * We can receive data in 2 ways:
-		 * 
-		 * 1) Through the rxchar() callback above. This will be called when we receive a character
-		 *    but the application wasnt ready for it. In this case, we want to prepare the UARTDriver
-		 *    object to correctly receive the rest of the packet, placing all the data in the
-		 *		serial_rx_buffer.
-		 *
-		 * 2) Through calls to uartReceive(). This will ensure a "proper" receiving of data - 
-		 *    the rxchar() callback will not be invoked, but the data will still be placed into
-		 *    the serial_rx_buffer.
-		 */
-
-		// not sure that we want to go this route. if we let the rxend() callback occur on every char transfer,
-		// that will continually have us call packet_process_byte() until a full request is received.
- 		//
-		// if we receive some chars in the serial_rx_buffer through rxend() and then try to receive the rest
-		// through uartStartReceive(), some (probably just 1) chars will end up in the serial_rx_buffer, 
-		// and the rest of the chars will end up in whatever buffer we pass to the function....
-
-
-		// if (rxCharReceived)
-		// {
-		// 	uartStartReceive(&HW_UART_DEV, MAX_PACKET_LENGTH, serial_rx_buffer);
-		// 	rxCharReceived = false;
-		// }
-
-		// check to see if we received a full message...do we need to do anything in that situation?
-		if (rxEndReceived)
-		{
-			
-		}
-		
-		while (serial_rx_read_pos != serial_rx_write_pos)
-		{
-
-			/**
-			 * This should be called on every received byte. When the packet interface detects the end of
-			 * a packet, it will call its process_func - in our case, this will be process_packet() above. 
-			 */
-			packet_process_byte(serial_rx_buffer[serial_rx_read_pos++], PACKET_HANDLER);
-
-			if (serial_rx_read_pos == SERIAL_RX_BUFFER_SIZE) {
-				serial_rx_read_pos = 0;
-			}
-		}
 	}
 }
 
@@ -467,12 +568,35 @@ static THD_FUNCTION(packet_process_thread, arg)
 													Implementation-specific
 
 *****************************************************************************/
+
+/**
+ * For testing purposes, you can have the VESC echo back a received request
+ * instead of actually issuing the command
+ */
+void echoCommand()
+{
+  uint8_t data[sizeof(mc_request) + 1];
+  data[0] = CONTROL_WRITE;
+  memcpy(data + 1, request.request_bytes, sizeof(mc_request));
+  send_packet_wrapper(data, sizeof(data)); 
+}
+
+void confirmationEcho()
+{
+  uint8_t confirmationBuf[3] = {0, 0, 0};
+  send_packet_wrapper(confirmationBuf, 3);
+}
+
+/**
+ * Set flags to indicate that we should publish feedback or status, handle in main thread.
+ */
 static void feedbackTaskCb(void* _)
 {
   (void)_;
   shouldSendFeedback = true;
   chSysLockFromISR();
   chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
 
@@ -482,6 +606,7 @@ static void statusTaskCb(void* _)
   shouldSendStatus = true;
   chSysLockFromISR();
   chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+  chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
 
@@ -495,7 +620,6 @@ void updateFeedback(void)
   fb.feedback.measured_position = mc_interface_get_pid_pos_now();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
-  // fb.feedback.switch_flags      = ST2MS(chVTGetSystemTimeX());
   fb.feedback.switch_flags      = (estop << 2) | (rev_limit << 1) | (fwd_limit); 
 }
 
@@ -532,27 +656,28 @@ void setCommand()
   switch (currentCommand.control) {
     case SPEED:
       fb.feedback.commanded_value = currentCommand.value_i;
+      // echoCommand();
       mc_interface_set_pid_speed(currentCommand.value_i);
       break;
-    case CURRENT:
-      fb.feedback.commanded_value = currentCommand.value_f * 1000; 
-      mc_interface_set_current(currentCommand.value_f);
-      break;
-    case DUTY:
-      fb.feedback.commanded_value = currentCommand.value_f * 1000;
-      mc_interface_set_duty(currentCommand.value_f);
-      break;
-    case POSITION:
-      fb.feedback.commanded_value = currentCommand.value_i;
-      mc_interface_set_pid_pos(currentCommand.value_i);
-      break;
-    case SCALE_POS:
-      fb.feedback.commanded_value = currentCommand.value_f * 1000;
-      mc_interface_set_pid_pos(descale_position(currentCommand.value_f));
-      break;
-    case HOMING: 
-      fb.feedback.commanded_value = mc_interface_get_pid_pos_now();
-      homing_sequence();
+    // case CURRENT:
+    //   fb.feedback.commanded_value = currentCommand.value_f * 1000; 
+    //   mc_interface_set_current(currentCommand.value_f);
+    //   break;
+    // case DUTY:
+    //   fb.feedback.commanded_value = currentCommand.value_f * 1000;
+    //   mc_interface_set_duty(currentCommand.value_f);
+    //   break;
+    // case POSITION:
+    //   fb.feedback.commanded_value = currentCommand.value_i;
+    //   mc_interface_set_pid_pos(currentCommand.value_i);
+    //   break;
+    // case SCALE_POS:
+    //   fb.feedback.commanded_value = currentCommand.value_f * 1000;
+    //   mc_interface_set_pid_pos(descale_position(currentCommand.value_f));
+    //   break;
+    // case HOMING: 
+    //   fb.feedback.commanded_value = mc_interface_get_pid_pos_now();
+    //   homing_sequence();
     default:
       break;
   }
@@ -649,10 +774,10 @@ void toggle_estop(EXTDriver *extp, expchannel_t channel)
 {
   (void) extp;
   (void) channel;
-  estop = palReadPad(GPIOA, 5) == PAL_LOW;
-  if (estop) {
-    mc_interface_set_brake_current(0);
-  }
+  estop = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX) == PAL_LOW;
+  // if (estop) {
+  //   mc_interface_set_brake_current(0);
+  // }
 }
 
 /*
@@ -664,10 +789,10 @@ void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel)
 {
   (void) extp;
   (void) channel;
-  fwd_limit = palReadPad(GPIOC, 0) == PAL_HIGH;
+  fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
   if (fwd_limit) {
     if (!shouldMove()) {
-      mc_interface_brake_now();
+      // mc_interface_brake_now();
     }
     max_tacho = mc_interface_get_tachometer_value(false);
   }
@@ -682,10 +807,10 @@ void toggle_rev_limit(EXTDriver *extp, expchannel_t channel)
 {
   (void) extp;
   (void) channel;
-  rev_limit = palReadPad(GPIOA, 6) == PAL_HIGH;
+  rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
   if (rev_limit) {
     if (!shouldMove()) {
-      mc_interface_brake_now();
+      // mc_interface_brake_now();
     }
     min_tacho = mc_interface_get_tachometer_value(false);
   }

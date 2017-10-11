@@ -15,7 +15,6 @@ void refreshTimer()
   vesc::onMillisTick();
 }
 
-
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "~");
@@ -32,15 +31,13 @@ int main(int argc, char** argv)
   nh.param<std::string>("cmd_topic", cmd_topic, cmd_topic);
   nh.param<bool>("is_drive_motor", is_drive_motor, is_drive_motor);
 
-  ROS_WARN_STREAM("namespace is" << nh.getNamespace() << "\n");
-  ROS_WARN_STREAM("config: port [" << port << "]\n");
-
   vesc::RosHandler ros_handler(
     fb_topic.c_str(), status_topic.c_str(), cmd_topic.c_str(), is_drive_motor, &nh
   );
 
   // initialize vesc communication
-  vesc::initComm(vesc::processFeedback, vesc::processStatus, port.c_str());
+  if (vesc::initComm(vesc::processFeedback, vesc::processStatus, port.c_str()) != 0)
+    ROS_ERROR("Error setting up serial port");
 
   ROS_WARN("Listening for VESC commands...");
   // nh.createTimer(ros::Duration(0.001), onTimerCallback);
