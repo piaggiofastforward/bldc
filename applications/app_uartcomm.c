@@ -256,11 +256,12 @@ static void rxchar(UARTDriver *uartp, uint16_t c)
   }
 
   // store the packetLength, accounting for 2 CRC bytes and a stop byte
-  else if (startByteReceived)
+  if (startByteReceived)
   {
     packetLength = c;
     packetLength += 3;
     packetLengthReceived = true;
+    startByteReceived = false;
   }
 
 	if (serial_rx_write_pos == SERIAL_RX_BUFFER_SIZE) {
@@ -541,6 +542,7 @@ static THD_FUNCTION(packet_process_thread, arg)
 			conf_general_store_mc_configuration((mc_configuration *) &mcconf);
 			updateConfigReceived = false;
 		}
+    // chThdSleepMilliseconds(5);
 	}
 }
 
