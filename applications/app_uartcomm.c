@@ -75,7 +75,6 @@ static void send_packet(unsigned char *data, unsigned int len);
 
 // state variables
 volatile bool rxEndReceived        = false;
-// volatile bool rxCharReceived       = false;
 volatile bool commandReceived      = false;
 volatile bool updateConfigReceived = false;
 static volatile bool estop = true;
@@ -89,14 +88,18 @@ static volatile int32_t max_tacho = INT_MIN;
  */
 static volatile mc_feedback_union fb;
 static volatile mc_status_union status;
-static volatile mc_request_union request;
-static volatile mc_request currentCommand = {{0}, {0}, 0};
+// static volatile mc_request_union request;
+// static volatile mc_request currentCommand = {{0}, {0}, 0};
+static volatile mc_cmd_union cmd;
+static volatile mc_cmd currentCommand;
 static volatile mc_configuration mcconf;
+// static volatile mc_config 
 
 /**
  * Forward declare various handlers.
  */
-static void initHardware();
+static void processConfigWrite(uint8_t *data);
+static void initHardware(void);
 static void setHall(hall_table_t hall_table);
 static void setCommand(void);
 static void setParameter(enum mc_config_param param, float value);
@@ -152,8 +155,8 @@ static volatile bool uartReceiving = false;
 /**
  * For testing purposes!
  */
-void echoCommand();
-void confirmationEcho();
+void echoCommand(void);
+void confirmationEcho(void);
 
 /**
  * Each pin can have at most one interrupt across GPIO sets.
@@ -314,10 +317,9 @@ static UARTConfig uart_cfg = {
 static void process_packet(unsigned char *data, unsigned int len)
 {
 	(void)len;
-  memcpy(request.request_bytes, data + 1, sizeof(mc_request));
+  mc_config_union config;
 
-	// // switch (data[0])
-  switch (request.request.type)
+	switch (data[0])
 	{
 		case CONFIG_READ:
 
@@ -325,16 +327,20 @@ static void process_packet(unsigned char *data, unsigned int len)
 			break;
 
 		case CONTROL_WRITE:
-			currentCommand = request.request;
+
+      memcpy(cmd.cmd_bytes, data + 1, sizeof(mc_cmd));
+			currentCommand = cmd.cmd;
 			commandReceived = true;
 			timeout_reset();
 			break;
 
 		case CONFIG_WRITE:
-			if (request.request.param == HALL_TABLE)
-				setHall(request.request.value_hall);
-			else
-				setParameter(request.request.param, request.request.value_f);
+      memcpy(config.config_bytes, data + 1, sizeof(mc_config));
+      setParameter(config.config.param, config.config.value_f);
+			// if (request.request.param == HALL_TABLE)
+			// 	setHall(request.request.value_hall);
+			// else
+			// 	setParameter(request.request.param, request.request.value_f);
 			updateConfigReceived = true;
 			break;
 
@@ -575,9 +581,9 @@ static THD_FUNCTION(packet_process_thread, arg)
  */
 void echoCommand()
 {
-  uint8_t data[sizeof(mc_request) + 1];
+  uint8_t data[sizeof(mc_cmd) + 1];
   data[0] = CONTROL_WRITE;
-  memcpy(data + 1, request.request_bytes, sizeof(mc_request));
+  memcpy(data + 1, cmd.cmd_bytes, sizeof(mc_cmd));
   send_packet_wrapper(data, sizeof(data)); 
 }
 
@@ -653,27 +659,27 @@ void sendStatus(void)
 
 void setCommand()
 {
-  switch (currentCommand.control) {
+  switch (currentCommand.control_mode) {
     case SPEED:
-      fb.feedback.commanded_value = currentCommand.value_i;
+      fb.feedback.commanded_value = currentCommand.target_cmd_i;
       // echoCommand();
-      mc_interface_set_pid_speed(currentCommand.value_i);
+      mc_interface_set_pid_speed(currentCommand.target_cmd_f);
       break;
     // case CURRENT:
-    //   fb.feedback.commanded_value = currentCommand.value_f * 1000; 
-    //   mc_interface_set_current(currentCommand.value_f);
+    //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000; 
+    //   mc_interface_set_current(currentCommand.target_cmd_f);
     //   break;
     // case DUTY:
-    //   fb.feedback.commanded_value = currentCommand.value_f * 1000;
-    //   mc_interface_set_duty(currentCommand.value_f);
+    //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;
+    //   mc_interface_set_duty(currentCommand.target_cmd_f);
     //   break;
     // case POSITION:
-    //   fb.feedback.commanded_value = currentCommand.value_i;
-    //   mc_interface_set_pid_pos(currentCommand.value_i);
+    //   fb.feedback.commanded_value = currentCommand.target_cmd_i;
+    //   mc_interface_set_pid_pos(currentCommand.target_cmd_i);
     //   break;
     // case SCALE_POS:
-    //   fb.feedback.commanded_value = currentCommand.value_f * 1000;
-    //   mc_interface_set_pid_pos(descale_position(currentCommand.value_f));
+    //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;
+    //   mc_interface_set_pid_pos(descale_position(currentCommand.target_cmd_f));
     //   break;
     // case HOMING: 
     //   fb.feedback.commanded_value = mc_interface_get_pid_pos_now();
@@ -681,6 +687,11 @@ void setCommand()
     default:
       break;
   }
+}
+
+static void processConfigWrite(uint8_t *data)
+{
+
 }
 
 /*
@@ -738,16 +749,16 @@ void homing_sequence(void)
 bool shouldMove(void) 
 {
   bool isForward = true;
-  switch (currentCommand.control) {
+  switch (currentCommand.control_mode) {
     case POSITION:
-      isForward = currentCommand.value_i - mc_interface_get_tachometer_value(false) > 0;
+      isForward = currentCommand.target_cmd_i - mc_interface_get_tachometer_value(false) > 0;
       break;
     case SCALE_POS:
-      isForward = descale_position(currentCommand.value_f / 1000.0f) > 0 - 
+      isForward = descale_position(currentCommand.target_cmd_f / 1000.0f) > 0 - 
         mc_interface_get_tachometer_value(false);
       break;
     case SPEED:
-      isForward = currentCommand.value_i > 0;
+      isForward = currentCommand.target_cmd_i > 0;
       break;
     case HOMING:
       if (max_tacho == INT_MIN) {
@@ -757,7 +768,7 @@ bool shouldMove(void)
       }
     case CURRENT:
     case DUTY:
-      isForward = currentCommand.value_f > 0;
+      isForward = currentCommand.target_cmd_f > 0;
       break;
   }
 
@@ -822,36 +833,36 @@ void toggle_rev_limit(EXTDriver *extp, expchannel_t channel)
 volatile float *getParamPtr(enum mc_config_param param)
 {
   switch (param) {
-    case FOC_KP:
-      return &mcconf.foc_current_kp;
-    case FOC_KI:
-      return &mcconf.foc_current_ki;
-    case MOTOR_L:
-      return &mcconf.foc_motor_l;
-    case MOTOR_R:
-      return &mcconf.foc_motor_r;
-    case MOTOR_FLUX:
-      return &mcconf.foc_motor_flux_linkage;
-    case OBSERVER_GAIN:
-      return &mcconf.foc_observer_gain;
-    case MAX_CURRENT:
-      return &mcconf.l_current_max;
-    case MIN_CURRENT:
-      return &mcconf.l_current_min;
-    case POS_PID_KP:
-      return &mcconf.p_pid_kp;
-    case POS_PID_KI:
-      return &mcconf.p_pid_ki;
-    case POS_PID_KD:
-      return &mcconf.p_pid_kd;
-    case SPEED_PID_KP:
-      return &mcconf.s_pid_kp;
-    case SPEED_PID_KI:
-      return &mcconf.s_pid_ki;
-    case SPEED_PID_KD:
-      return &mcconf.s_pid_kd;
-    case SPEED_PID_MIN_RPM:
-      return &mcconf.s_pid_min_erpm;
+    // case FOC_KP:
+    //   return &mcconf.foc_current_kp;
+    // case FOC_KI:
+    //   return &mcconf.foc_current_ki;
+    // case MOTOR_L:
+    //   return &mcconf.foc_motor_l;
+    // case MOTOR_R:
+    //   return &mcconf.foc_motor_r;
+    // case MOTOR_FLUX:
+    //   return &mcconf.foc_motor_flux_linkage;
+    // case OBSERVER_GAIN:
+    //   return &mcconf.foc_observer_gain;
+    // case MAX_CURRENT:
+    //   return &mcconf.l_current_max;
+    // case MIN_CURRENT:
+    //   return &mcconf.l_current_min;
+    // case POS_PID_KP:
+    //   return &mcconf.p_pid_kp;
+    // case POS_PID_KI:
+    //   return &mcconf.p_pid_ki;
+    // case POS_PID_KD:
+    //   return &mcconf.p_pid_kd;
+    // case SPEED_PID_KP:
+    //   return &mcconf.s_pid_kp;
+    // case SPEED_PID_KI:
+    //   return &mcconf.s_pid_ki;
+    // case SPEED_PID_KD:
+    //   return &mcconf.s_pid_kd;
+    // case SPEED_PID_MIN_RPM:
+    //   return &mcconf.s_pid_min_erpm;
     default:
       return NULL;
   }
