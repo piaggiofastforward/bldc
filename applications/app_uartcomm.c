@@ -833,36 +833,232 @@ void toggle_rev_limit(EXTDriver *extp, expchannel_t channel)
 volatile float *getParamPtr(enum mc_config_param param)
 {
   switch (param) {
-    // case FOC_KP:
-    //   return &mcconf.foc_current_kp;
-    // case FOC_KI:
-    //   return &mcconf.foc_current_ki;
-    // case MOTOR_L:
-    //   return &mcconf.foc_motor_l;
-    // case MOTOR_R:
-    //   return &mcconf.foc_motor_r;
-    // case MOTOR_FLUX:
-    //   return &mcconf.foc_motor_flux_linkage;
-    // case OBSERVER_GAIN:
-    //   return &mcconf.foc_observer_gain;
-    // case MAX_CURRENT:
-    //   return &mcconf.l_current_max;
-    // case MIN_CURRENT:
-    //   return &mcconf.l_current_min;
-    // case POS_PID_KP:
-    //   return &mcconf.p_pid_kp;
-    // case POS_PID_KI:
-    //   return &mcconf.p_pid_ki;
-    // case POS_PID_KD:
-    //   return &mcconf.p_pid_kd;
-    // case SPEED_PID_KP:
-    //   return &mcconf.s_pid_kp;
-    // case SPEED_PID_KI:
-    //   return &mcconf.s_pid_ki;
-    // case SPEED_PID_KD:
-    //   return &mcconf.s_pid_kd;
-    // case SPEED_PID_MIN_RPM:
-    //   return &mcconf.s_pid_min_erpm;
+    case L_CURRENT_MAX:
+      return &mcconf.l_current_max;
+    case M_SENSOR_PORT_MODE:
+      return &mcconf.m_sensor_port_mode;
+    case OBSERVER_GAIN_SLOW:
+      return &mcconf.foc_observer_gain_slow;
+    case FOC_PLL_KP:
+      return &mcconf.foc_pll_kp;
+    case SL_CYCLE_INT_RPM:
+      return &mcconf.sl_cycle_int_rpm_br;
+    case M_DRV8301_OC_ADJ:
+      return &mcconf.m_drv8301_oc_adj;
+    case L_IN_CURRENT_MAX:
+      return &mcconf.l_in_current_max;
+    case OPENLOOP_HYST:
+      return &mcconf.foc_openloop_hyst;
+    case ENCODER_OFFSET:
+      return &mcconf.foc_encoder_offset;
+    case MOTOR_QUALITY_BEARINGS:
+      return &mcconf.motor_quality_bearings;
+    case TEMP_FET_END:
+      return &mcconf.l_temp_fet_end;
+    case MOTOR_QUALITY_MAGNETS:
+      return &mcconf.motor_quality_magnets;
+    case ENCODER_INVERTED:
+      return &mcconf.foc_encoder_inverted;
+    case OPENLOOP_TIME:
+      return &mcconf.foc_openloop_time;
+    case SL_MIN_ERPM:
+      return &mcconf.sl_min_erpm;
+    case BATTERY_CUT_END:
+      return &mcconf.l_battery_cut_end;
+    case FOC_OBSERVER_GAIN:
+      return &mcconf.foc_observer_gain;
+    case PID_ALLOW_BRAKING:
+      return &mcconf.s_pid_allow_braking;
+    case WATT_MAX:
+      return &mcconf.l_watt_max;
+    case SL_CYCLE_INT_LIMIT:
+      return &mcconf.sl_cycle_int_limit;
+    case FOC_CURRENT_KI:
+      return &mcconf.foc_current_ki;
+    case MAX_EPRM_FBRAKE_CC:
+      return &mcconf.l_max_erpm_fbrake_cc;
+    case MIN_DUTY:
+      return &mcconf.l_min_duty;
+    case FOC_CURRENT_KP:
+      return &mcconf.foc_current_kp;
+    case DUTY_RAMP_STEP:
+      return &mcconf.m_duty_ramp_step;
+    case FOC_SAMPLE_V0_V7:
+      return &mcconf.foc_sample_v0_v7;
+    case ABS_CURRENT_MAX:
+      return &mcconf.l_abs_current_max;
+    case FOC_TEMP_COMP:
+      return &mcconf.foc_temp_comp;
+    case S_PID_MIN_ERPM:
+      return &mcconf.s_pid_min_erpm;
+    case M_NTC_MOTOR_BETA:
+      return &mcconf.m_ntc_motor_beta;
+    case MAX_DUTY:
+      return &mcconf.l_max_duty;
+    case MOTOR_FLUX_LINKAGE:
+      return &mcconf.foc_motor_flux_linkage;
+    case MAX_ERPM_FBRAKE:
+      return &mcconf.l_max_erpm_fbrake;
+    case HALL_SL_ERPM:
+      return &mcconf.hall_sl_erpm;
+    case FOC_SL_D_CURRENT_FACTOR:
+      return &mcconf.foc_sl_d_current_factor;
+    case CC_MIN_CURRENT:
+      return &mcconf.cc_min_current;
+    case CC_RAMP_STEP_MAX:
+      return &mcconf.cc_ramp_step_max;
+    case SENSOR_MODE:
+      return &mcconf.sensor_mode;
+    case FOC_SAMPLE_HIGH_CURRENT: 
+      return &mcconf.foc_sample_high_current;
+    case L_ERPM_START:
+      return &mcconf.l_erpm_start;
+    case FOC_DT_US:
+      return &mcconf.foc_dt_us;
+    case CC_GAIN:
+      return &mcconf.cc_gain;
+    case M_ENCODER_COUNTS:
+      return &mcconf.m_encoder_counts;
+    case L_MAX_VIN:
+      return &mcconf.l_max_vin;
+    case HALL_TABLE_0:
+      return &mcconf.hall_table_0;
+    case M_BLDC_F_SW_MIN:
+      return &mcconf.m_bldc_f_sw_min;
+    case HALL_TABLE_1:
+      return &mcconf.hall_table_1;
+    case HALL_TABLE_2:
+      return &mcconf.hall_table_2;
+    case HALL_TABLE_3:
+      return &mcconf.hall_table_3;
+    case HALL_TABLE_4:
+      return &mcconf.hall_table_4;
+    case MOTOR_WEIGHT:
+      return &mcconf.motor_weight;
+    case FOC_HALL_TABLE_0:
+      return &mcconf.foc_hall_table_0;
+    case HALL_TABLE_5:
+      return &mcconf.hall_table_5;
+    case FOC_HALL_TABLE_1:
+      return &mcconf.foc_hall_table_1;
+    case HALL_TABLE_6:
+      return &mcconf.hall_table_6;
+    case PWM_MODE:
+      return &mcconf.pwm_mode;
+    case HALL_TABLE_7:
+      return &mcconf.hall_table_7;
+    case FOC_HALL_TABLE_2:
+      return &mcconf.foc_hall_table_2;
+    case P_PID_KD:
+      return &mcconf.p_pid_kd;
+    case L_TEMP_MOTOR_END:
+      return &mcconf.l_temp_motor_end;
+    case FOC_HALL_TABLE_3:
+      return &mcconf.foc_hall_table_3;
+    case FOC_HALL_TABLE_4:
+      return &mcconf.foc_hall_table_4;
+    case FOC_SAT_COMP:
+      return &mcconf.foc_sat_comp;
+    case FOC_HALL_TABLE_5:
+      return &mcconf.foc_hall_table_5;
+    case FOC_HALL_TABLE_6:
+      return &mcconf.foc_hall_table_6;
+    case P_PID_ANG_DIV:
+      return &mcconf.p_pid_ang_div;
+    case MAX_FULLBREAK_CURRENT_DIR_CHANGE:
+      return &mcconf.max_fullbreak_current_dir_change;
+    case L_BATTERY_CUT_START:
+      return &mcconf.l_battery_cut_start;
+    case FOC_HALL_TABLE_7:
+      return &mcconf.foc_hall_table_7;
+    case P_PID_KI:
+      return &mcconf.p_pid_ki;
+    case M_INVERT_DIRECTION:
+      return &mcconf.m_invert_direction;
+    case FOC_SL_D_CURRENT_DUTY:
+      return &mcconf.foc_sl_d_current_duty;
+    case MOTOR_TYPE:
+      return &mcconf.motor_type;
+    case CC_STARTUP_BOOST_DUTY:
+      return &mcconf.cc_startup_boost_duty;
+    case FOC_TEMP_COMP_BASE_TEMP:
+      return &mcconf.foc_temp_comp_base_temp;
+    case P_PID_KP:
+      return &mcconf.p_pid_kp;
+    case L_MIN_ERPM:
+      return &mcconf.l_min_erpm;
+    case FOC_SL_ERPM:
+      return &mcconf.foc_sl_erpm;
+    case M_FAULT_STOP_TIME_MS:
+      return &mcconf.m_fault_stop_time_ms;
+    case MOTOR_BRAND:
+      return &mcconf.motor_brand;
+    case M_BLDC_F_SW_MAX:
+      return &mcconf.m_bldc_f_sw_max;
+    case S_PID_KD:
+      return &mcconf.s_pid_kd;
+    case L_TEMP_FET_START:
+      return &mcconf.l_temp_fet_start;
+    case L_MAX_ERPM:
+      return &mcconf.l_max_erpm;
+    case SL_PHASE_ADVANCE_AT_BR:
+      return &mcconf.sl_phase_advance_at_br;
+    case FOC_MOTOR_L:
+      return &mcconf.foc_motor_l;
+    case S_PID_KI:
+      return &mcconf.s_pid_ki;
+    case M_DRV8301_OC_MODE:
+      return &mcconf.m_drv8301_oc_mode;
+    case L_MIN_VIN:
+      return &mcconf.l_min_vin;
+    case FOC_MOTOR_R:
+      return &mcconf.foc_motor_r;
+    case FOC_DUTY_DOWNRAMP_KI:
+      return &mcconf.foc_duty_dowmramp_ki;
+    case COMM_MODE:
+      return &mcconf.comm_mode;
+    case MOTOR_QUALITY_CONSTRUCTION:
+      return &mcconf.motor_quality_construction;
+    case S_PID_KP:
+      return &mcconf.s_pid_kp;
+    case FOC_DUTY_DOWNRAMP_KP:
+      return &mcconf.foc_duty_dowmramp_kp:
+    case L_CURRENT_MIN:
+      return &mcconf.l_current_min;
+    case FOC_ENCODER_RATIO:
+      return &mcconf.foc_encoder_ratio;
+    case L_IN_CURRENT_MIN:
+      return &mcconf.l_in_current_min;
+    case M_CURRENT_BACKOFF_GAIN:
+      return &mcconf.m_current_backoff_gain;
+    case SL_BEMF_COUPLING_K:
+      return &mcconf.sl_bemf_coupling_k;
+    case MOTOR_SENSOR_TYPE: 
+      return &mcconf.motor_sensor_type;
+    case MOTOR_MODEL:
+      return &mcconf.motor_model;
+    case SL_MIN_ERPM_CYCLE_INT_LIMIT:
+      return &mcconf.sl_min_erpm_cycle_int_limit;
+    case L_TEMP_MOTOR_START:
+      return &mcconf.l_temp_motor_start;
+    case OPENLOOP_RPM:
+      return &mcconf.foc_openloop_rpm;
+    case L_SLOW_ABS_CURRENT:
+      return &mcconf.l_slow_abs_current;
+    case FOC_SENSOR_MODE:
+      return &mcconf.foc_sensor_mode;
+    case MOTOR_LOSS_TORQUE:
+      return &mcconf.motor_loss_torque;
+    case M_DC_F_SW:
+      return &mcconf.m_dc_f_sw;
+    case FOC_F_SW:
+      return &mcconf.foc_f_sw;
+    case MOTOR_POLES:
+      return &mcconf.motor_poles;
+    case FOC_PLL_KI: 
+      return &mcconf.foc_pll_ki;
+    case L_WATT_MIN:
+      return &mcconf.l_watt_min;
     default:
       return NULL;
   }
