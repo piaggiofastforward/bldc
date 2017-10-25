@@ -36,6 +36,7 @@
 #include "mc_interface.h"  // motor control functions
 #include "timeout.h"       // timeout_reset()
 #include "ext_lld.h"
+#include "mcpwm_foc.h"
 
 // Settings
 #define BAUDRATE					115200
@@ -88,21 +89,18 @@ static volatile int32_t max_tacho = INT_MIN;
  */
 static volatile mc_feedback_union fb;
 static volatile mc_status_union status;
-// static volatile mc_request_union request;
-// static volatile mc_request currentCommand = {{0}, {0}, 0};
 static volatile mc_cmd_union cmd;
 static volatile mc_cmd currentCommand;
 static volatile mc_configuration mcconf;
-// static volatile mc_config 
 
 /**
  * Forward declare various handlers.
  */
-static void processConfigWrite(uint8_t *data);
 static void initHardware(void);
 static void setHall(hall_table_t hall_table);
+static void setHallFoc(hall_table_foc_t hall_table);
 static void setCommand(void);
-static void setParameter(enum mc_config_param param, float value);
+static void setParameter(mc_config config);
 static int getStringPotValue(void);
 volatile float *getParamPtr(enum mc_config_param param);
 int32_t descale_position(float pos);
@@ -318,6 +316,7 @@ static void process_packet(unsigned char *data, unsigned int len)
 {
 	(void)len;
   mc_config_union config;
+  mc_config_hall_union config_hall;
 
 	switch (data[0])
 	{
@@ -336,14 +335,17 @@ static void process_packet(unsigned char *data, unsigned int len)
 
 		case CONFIG_WRITE:
       memcpy(config.config_bytes, data + 1, sizeof(mc_config));
-      setParameter(config.config.param, config.config.value_f);
-			// if (request.request.param == HALL_TABLE)
-			// 	setHall(request.request.value_hall);
-			// else
-			// 	setParameter(request.request.param, request.request.value_f);
-			updateConfigReceived = true;
+      setParameter(config.config);
+			// updateConfigReceived = true;
 			break;
 
+    case CONFIG_WRITE_HALL:
+      memcpy(config_hall.config_bytes, data + 1, sizeof(mc_config_hall));
+      if (config_hall.config.param == HALL_TABLE)
+        setHall(config_hall.config.hall_values);
+      else
+        setHallFoc(config_hall.config.hall_foc_values);
+      break;
 		default:
 			break;
 	}
@@ -557,13 +559,13 @@ static THD_FUNCTION(packet_process_thread, arg)
 			commandReceived = false;
 		}
 
-		if (updateConfigReceived)
-		{
-			// do stuff
-			mc_interface_set_configuration((mc_configuration *) &mcconf);
-			conf_general_store_mc_configuration((mc_configuration *) &mcconf);
-			updateConfigReceived = false;
-		}
+		// if (updateConfigReceived)
+		// {
+		// 	// do stuff
+		// 	mc_interface_set_configuration((mc_configuration *) &mcconf);
+		// 	conf_general_store_mc_configuration((mc_configuration *) &mcconf);
+		// 	updateConfigReceived = false;
+		// }
 	}
 }
 
@@ -689,11 +691,6 @@ void setCommand()
   }
 }
 
-static void processConfigWrite(uint8_t *data)
-{
-
-}
-
 /*
  * Copies the provided hall table to the local configuration
  *
@@ -701,18 +698,14 @@ static void processConfigWrite(uint8_t *data)
  */
 static void setHall(hall_table_t hall_table)
 {
+  memcpy((void *) mcconf.hall_table, hall_table, HALL_TABLE_SIZE);
+}
+
+static void setHallFoc(hall_table_foc_t hall_table)
+{
   memcpy((void *) mcconf.foc_hall_table, hall_table, HALL_TABLE_SIZE);
 }
 
-/*
- * Sets the parameter to the provided value in the local configuration
- *
- * Does not update the configuration externally
- */
-static void setParameter(enum mc_config_param param, float value)
-{
-  *getParamPtr(param) = value;
-}
 
 /*
  * Returns the absolute position in ticks based on the min and max limits
@@ -828,67 +821,135 @@ void toggle_rev_limit(EXTDriver *extp, expchannel_t channel)
 }
 
 /*
- * Returns a pointer to the parameter in the local configuration
+ * Sets the parameter to the provided value in the local configuration
+ *
+ * Does not update the configuration externally
  */
-volatile float *getParamPtr(enum mc_config_param param)
+static void setParameter(mc_config config)
 {
-  switch (param) {
-    case L_CURRENT_MAX:
-      return &mcconf.l_current_max;
-    case M_SENSOR_PORT_MODE:
-      return &mcconf.m_sensor_port_mode;
-    case OBSERVER_GAIN_SLOW:
-      return &mcconf.foc_observer_gain_slow;
-    case FOC_PLL_KP:
-      return &mcconf.foc_pll_kp;
-    case SL_CYCLE_INT_RPM:
-      return &mcconf.sl_cycle_int_rpm_br;
-    case M_DRV8301_OC_ADJ:
-      return &mcconf.m_drv8301_oc_adj;
-    case L_IN_CURRENT_MAX:
-      return &mcconf.l_in_current_max;
-    case OPENLOOP_HYST:
-      return &mcconf.foc_sl_openloop_hyst;
-    case ENCODER_OFFSET:
-      return &mcconf.foc_encoder_offset;
-    case MOTOR_QUALITY_BEARINGS:
-      return &mcconf.motor_quality_bearings;
-    case L_TEMP_FET_END:
-      return &mcconf.l_temp_fet_end;
-    case MOTOR_QUALITY_MAGNETS:
-      return &mcconf.motor_quality_magnets;
+  switch(config.param)
+  {
+    /**
+     *  This case includes bools and uint8_t - anything that's a single byte
+     */
+    case PWM_MODE:
+      mcconf.pwm_mode = config.value_byte;
+      break;
+    case COMM_MODE:
+      mcconf.comm_mode = config.value_byte;
+      break;
+    case MOTOR_TYPE:
+      mcconf.motor_type = config.value_byte;
+      break;
+    case SENSOR_MODE:
+      mcconf.sensor_mode = config.value_byte;
+      break;
+    case L_SLOW_ABS_CURRENT:
+      mcconf.l_slow_abs_current = config.value_byte;
+      break;
     case ENCODER_INVERTED:
-      return &mcconf.foc_encoder_inverted;
-    case OPENLOOP_TIME:
-      return &mcconf.foc_sl_openloop_time;
-    case SL_MIN_ERPM:
-      return &mcconf.sl_min_erpm;
-    case BATTERY_CUT_END:
-      return &mcconf.l_battery_cut_end;
-    case FOC_OBSERVER_GAIN:
-      return &mcconf.foc_observer_gain;
+      mcconf.foc_encoder_inverted = config.value_byte;
+      break;
+    case FOC_SAMPLE_V0_V7:
+      mcconf.foc_sample_v0_v7 = config.value_byte;
+      break;
+    case FOC_SAMPLE_HIGH_CURRENT:
+      mcconf.foc_sample_high_current = config.value_byte;
+      break;
+    case FOC_TEMP_COMP:
+      mcconf.foc_temp_comp = config.value_byte;
+      break;
+    case FOC_SENSOR_MODE:
+      mcconf.foc_sensor_mode = config.value_byte;
+      break;
     case PID_ALLOW_BRAKING:
-      return &mcconf.s_pid_allow_braking;
-    case WATT_MAX:
-      return &mcconf.l_watt_max;
-    case SL_CYCLE_INT_LIMIT:
-      return &mcconf.sl_cycle_int_limit;
-    case FOC_CURRENT_KI:
-      return &mcconf.foc_current_ki;
-    case MAX_EPRM_FBRAKE_CC:
-      return &mcconf.l_max_erpm_fbrake_cc;
-    case MIN_DUTY:
-      return &mcconf.l_min_duty;
-    case FOC_CURRENT_KP:
-      return &mcconf.foc_current_kp;
+      mcconf.s_pid_allow_braking = config.value_byte;
+      break;
+    case M_SENSOR_PORT_MODE:
+      mcconf.m_sensor_port_mode = config.value_byte;
+      break;
+    case M_DRV8301_OC_MODE:
+      mcconf.m_drv8301_oc_mode = config.value_byte;
+      break;
+    case M_INVERT_DIRECTION:
+      mcconf.m_invert_direction = config.value_byte;
+      break;
+
+    /**
+     *  32-bit signed fields
+     */
+    case M_FAULT_STOP_TIME_MS:
+        mcconf.m_fault_stop_time_ms = config.value_i;
+        break;
+      case M_DRV8301_OC_ADJ:
+        mcconf.m_drv8301_oc_adj = config.value_i;
+        break;
+
+    /**
+     *  32-bit unsigned fields
+     */
+    case M_ENCODER_COUNTS:
+      mcconf.m_encoder_counts = config.value_ui;
+      break;
+
+    // default - the rest are floats
+    default:
+      *getParamPtr(config.param) = config.value_f;
+      break;
+    }
+
+  }
+
+  /*
+   * Returns a pointer to the parameter in the local configuration
+   */
+  volatile float *getParamPtr(enum mc_config_param param)
+  {
+    switch (param) {
+      case L_CURRENT_MAX:
+        return &mcconf.l_current_max;
+      case OBSERVER_GAIN_SLOW:
+        return &mcconf.foc_observer_gain_slow;
+      case FOC_PLL_KP:
+        return &mcconf.foc_pll_kp;
+      case SL_CYCLE_INT_RPM:
+        return &mcconf.sl_cycle_int_rpm_br;
+      case L_IN_CURRENT_MAX:
+        return &mcconf.l_in_current_max;
+      case OPENLOOP_HYST:
+        return &mcconf.foc_sl_openloop_hyst;
+      case ENCODER_OFFSET:
+        return &mcconf.foc_encoder_offset;
+      // case MOTOR_QUALITY_BEARINGS:
+      //   return &mcconf.motor_quality_bearings;
+      case L_TEMP_FET_END:
+        return &mcconf.l_temp_fet_end;
+      // case MOTOR_QUALITY_MAGNETS:
+      //   return &mcconf.motor_quality_magnets;
+      case OPENLOOP_TIME:
+        return &mcconf.foc_sl_openloop_time;
+      case SL_MIN_ERPM:
+        return &mcconf.sl_min_erpm;
+      case BATTERY_CUT_END:
+        return &mcconf.l_battery_cut_end;
+      case FOC_OBSERVER_GAIN:
+        return &mcconf.foc_observer_gain;
+      case WATT_MAX:
+        return &mcconf.l_watt_max;
+      case SL_CYCLE_INT_LIMIT:
+        return &mcconf.sl_cycle_int_limit;
+      case FOC_CURRENT_KI:
+        return &mcconf.foc_current_ki;
+      case MAX_EPRM_FBRAKE_CC:
+        return &mcconf.l_max_erpm_fbrake_cc;
+      case MIN_DUTY:
+        return &mcconf.l_min_duty;
+      case FOC_CURRENT_KP:
+        return &mcconf.foc_current_kp;
     case DUTY_RAMP_STEP:
       return &mcconf.m_duty_ramp_step;
-    case FOC_SAMPLE_V0_V7:
-      return &mcconf.foc_sample_v0_v7;
     case ABS_CURRENT_MAX:
       return &mcconf.l_abs_current_max;
-    case FOC_TEMP_COMP:
-      return &mcconf.foc_temp_comp;
     case S_PID_MIN_ERPM:
       return &mcconf.s_pid_min_erpm;
     case M_NTC_MOTOR_BETA:
@@ -907,78 +968,34 @@ volatile float *getParamPtr(enum mc_config_param param)
       return &mcconf.cc_min_current;
     case CC_RAMP_STEP_MAX:
       return &mcconf.cc_ramp_step_max;
-    case SENSOR_MODE:
-      return &mcconf.sensor_mode;
-    case FOC_SAMPLE_HIGH_CURRENT: 
-      return &mcconf.foc_sample_high_current;
     case L_ERPM_START:
       return &mcconf.l_erpm_start;
     case FOC_DT_US:
       return &mcconf.foc_dt_us;
     case CC_GAIN:
       return &mcconf.cc_gain;
-    case M_ENCODER_COUNTS:
-      return &mcconf.m_encoder_counts;
     case L_MAX_VIN:
       return &mcconf.l_max_vin;
-    case HALL_TABLE_0:
-      return &mcconf.hall_table_0;
     case M_BLDC_F_SW_MIN:
       return &mcconf.m_bldc_f_sw_min;
-    case HALL_TABLE_1:
-      return &mcconf.hall_table_1;
-    case HALL_TABLE_2:
-      return &mcconf.hall_table_2;
-    case HALL_TABLE_3:
-      return &mcconf.hall_table_3;
-    case HALL_TABLE_4:
-      return &mcconf.hall_table_4;
-    case MOTOR_WEIGHT:
-      return &mcconf.motor_weight;
-    case FOC_HALL_TABLE_0:
-      return &mcconf.foc_hall_table_0;
-    case HALL_TABLE_5:
-      return &mcconf.hall_table_5;
-    case FOC_HALL_TABLE_1:
-      return &mcconf.foc_hall_table_1;
-    case HALL_TABLE_6:
-      return &mcconf.hall_table_6;
-    case PWM_MODE:
-      return &mcconf.pwm_mode;
-    case HALL_TABLE_7:
-      return &mcconf.hall_table_7;
-    case FOC_HALL_TABLE_2:
-      return &mcconf.foc_hall_table_2;
+    // case MOTOR_WEIGHT:
+    //   return &mcconf.motor_weight;
     case P_PID_KD:
       return &mcconf.p_pid_kd;
     case L_TEMP_MOTOR_END:
       return &mcconf.l_temp_motor_end;
-    case FOC_HALL_TABLE_3:
-      return &mcconf.foc_hall_table_3;
-    case FOC_HALL_TABLE_4:
-      return &mcconf.foc_hall_table_4;
     case FOC_SAT_COMP:
       return &mcconf.foc_sat_comp;
-    case FOC_HALL_TABLE_5:
-      return &mcconf.foc_hall_table_5;
-    case FOC_HALL_TABLE_6:
-      return &mcconf.foc_hall_table_6;
     case P_PID_ANG_DIV:
       return &mcconf.p_pid_ang_div;
     case MAX_FULLBREAK_CURRENT_DIR_CHANGE:
-      return &mcconf.max_fullbreak_current_dir_change;
+      return &mcconf.sl_max_fullbreak_current_dir_change;
     case L_BATTERY_CUT_START:
       return &mcconf.l_battery_cut_start;
-    case FOC_HALL_TABLE_7:
-      return &mcconf.foc_hall_table_7;
     case P_PID_KI:
       return &mcconf.p_pid_ki;
-    case M_INVERT_DIRECTION:
-      return &mcconf.m_invert_direction;
     case FOC_SL_D_CURRENT_DUTY:
       return &mcconf.foc_sl_d_current_duty;
-    case MOTOR_TYPE:
-      return &mcconf.motor_type;
     case CC_STARTUP_BOOST_DUTY:
       return &mcconf.cc_startup_boost_duty;
     case FOC_TEMP_COMP_BASE_TEMP:
@@ -989,10 +1006,8 @@ volatile float *getParamPtr(enum mc_config_param param)
       return &mcconf.l_min_erpm;
     case FOC_SL_ERPM:
       return &mcconf.foc_sl_erpm;
-    case M_FAULT_STOP_TIME_MS:
-      return &mcconf.m_fault_stop_time_ms;
-    case MOTOR_BRAND:
-      return &mcconf.motor_brand;
+    // case MOTOR_BRAND:
+    //   return &mcconf.motor_brand;
     case M_BLDC_F_SW_MAX:
       return &mcconf.m_bldc_f_sw_max;
     case S_PID_KD:
@@ -1007,18 +1022,14 @@ volatile float *getParamPtr(enum mc_config_param param)
       return &mcconf.foc_motor_l;
     case S_PID_KI:
       return &mcconf.s_pid_ki;
-    case M_DRV8301_OC_MODE:
-      return &mcconf.m_drv8301_oc_mode;
     case L_MIN_VIN:
       return &mcconf.l_min_vin;
     case FOC_MOTOR_R:
       return &mcconf.foc_motor_r;
     case FOC_DUTY_DOWNRAMP_KI:
       return &mcconf.foc_duty_dowmramp_ki;
-    case COMM_MODE:
-      return &mcconf.comm_mode;
-    case MOTOR_QUALITY_CONSTRUCTION:
-      return &mcconf.motor_quality_construction;
+    // case MOTOR_QUALITY_CONSTRUCTION:
+    //   return &mcconf.motor_quality_construction;
     case S_PID_KP:
       return &mcconf.s_pid_kp;
     case FOC_DUTY_DOWNRAMP_KP:
@@ -1033,28 +1044,24 @@ volatile float *getParamPtr(enum mc_config_param param)
       return &mcconf.m_current_backoff_gain;
     case SL_BEMF_COUPLING_K:
       return &mcconf.sl_bemf_coupling_k;
-    case MOTOR_SENSOR_TYPE: 
-      return &mcconf.sensor_mode;
-    case MOTOR_MODEL:
-      return &mcconf.motor_model;
+    // case MOTOR_SENSOR_TYPE: 
+    //   return &mcconf.sensor_mode;
+    // case MOTOR_MODEL:
+    //   return &mcconf.motor_model;
     case SL_MIN_ERPM_CYCLE_INT_LIMIT:
       return &mcconf.sl_min_erpm_cycle_int_limit;
     case L_TEMP_MOTOR_START:
       return &mcconf.l_temp_motor_start;
     case OPENLOOP_RPM:
       return &mcconf.foc_openloop_rpm;
-    case L_SLOW_ABS_CURRENT:
-      return &mcconf.l_slow_abs_current;
-    case FOC_SENSOR_MODE:
-      return &mcconf.foc_sensor_mode;
-    case MOTOR_LOSS_TORQUE:
-      return &mcconf.motor_loss_torque;
+    // case MOTOR_LOSS_TORQUE:
+    //   return &mcconf.motor_loss_torque;
     case M_DC_F_SW:
       return &mcconf.m_dc_f_sw;
     case FOC_F_SW:
       return &mcconf.foc_f_sw;
-    case MOTOR_POLES:
-      return &mcconf.motor_poles;
+    // case MOTOR_POLES:
+    //   return &mcconf.motor_poles;
     case FOC_PLL_KI: 
       return &mcconf.foc_pll_ki;
     case L_WATT_MIN:
