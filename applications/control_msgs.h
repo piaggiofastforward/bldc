@@ -156,7 +156,11 @@ enum mc_config_param ENUM_SIZE {
   FOC_PLL_KI,
   L_WATT_MIN,
 
-  // HALL_TABLE // use hall_table
+
+  // These values will each be arrays of 8 bytes
+  HALL_TABLE,
+  HALL_TABLE_FOC,
+
 };
 
 // The hall table is an array of eight values determined by bldc-tool
@@ -189,6 +193,21 @@ typedef union {
   mc_config config;
   uint8_t config_bytes[sizeof(mc_config)];
 } mc_config_union;
+
+/**
+ *  Hall tables (for both FOC and BLDC) consist of 8 values. If we included these in the mc_config_union,
+ *  all values would be forced to be the size of the largest transaction - hall table config writes.
+ *  The enum and union below were introduced to avoid that situation.
+ */
+typedef struct {
+  hall_table_t hall_values;
+  enum mc_config_param param;
+} mc_config_hall;
+
+typedef union {
+  mc_config_hall config;
+  uint8_t config_bytes[sizeof(mc_config_hall)];
+} mc_config_hall_union;
  
 /***************************
  * VESC FEEDBACK DATATYPES *
