@@ -26,7 +26,8 @@ enum mc_packet_type ENUM_SIZE {
   STATUS_DATA,
   CONTROL_WRITE,
   CONFIG_WRITE,
-  CONFIG_WRITE_HALL // only for HALL_TABLE and HALL_TABLE_FOC
+  CONFIG_WRITE_HALL, // only for HALL_TABLE and HALL_TABLE_FOC
+  COMMIT_MC_CONFIG,  // use after many CONFIG_WRITE*s in order to actually effect the changes
 };
 
 // An enum to differentiate control modes

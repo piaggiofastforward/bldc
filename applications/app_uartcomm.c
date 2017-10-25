@@ -78,6 +78,7 @@ static void send_packet(unsigned char *data, unsigned int len);
 volatile bool rxEndReceived        = false;
 volatile bool commandReceived      = false;
 volatile bool updateConfigReceived = false;
+volatile bool commitConfigReceived = false;
 static volatile bool estop = true;
 static volatile bool rev_limit = false;
 static volatile bool fwd_limit = false;
@@ -346,6 +347,11 @@ static void process_packet(unsigned char *data, unsigned int len)
       else
         setHallFoc(config_hall.config.hall_foc_values);
       break;
+
+    case COMMIT_MC_CONFIG:
+      commitConfigReceived = true;
+      break;
+
 		default:
 			break;
 	}
@@ -558,6 +564,14 @@ static THD_FUNCTION(packet_process_thread, arg)
 			setCommand();
 			commandReceived = false;
 		}
+
+    if (commitConfigReceived)
+    {
+      conf_general_store_mc_configuration((mc_configuration *) &mcconf);
+      mc_interface_set_configuration((mc_configuration *) &mcconf);
+      chThdSleepMilliseconds(500);
+      commitConfigReceived = false;
+    }
 
 		// if (updateConfigReceived)
 		// {
