@@ -88,29 +88,14 @@ enum mc_config_param ENUM_SIZE {
   L_MAX_VIN,
   HALL_TABLE_0,
   M_BLDC_F_SW_MIN,
-  HALL_TABLE_1,
-  HALL_TABLE_2,
-  HALL_TABLE_3,
-  HALL_TABLE_4,
   MOTOR_WEIGHT,
-  FOC_HALL_TABLE_0,
-  HALL_TABLE_5,
-  FOC_HALL_TABLE_1,
-  HALL_TABLE_6,
   PWM_MODE,
-  HALL_TABLE_7,
-  FOC_HALL_TABLE_2,
   P_PID_KD,
   L_TEMP_MOTOR_END,
-  FOC_HALL_TABLE_3,
-  FOC_HALL_TABLE_4,
   FOC_SAT_COMP,
-  FOC_HALL_TABLE_5,
-  FOC_HALL_TABLE_6,
   P_PID_ANG_DIV,
   MAX_FULLBREAK_CURRENT_DIR_CHANGE,
   L_BATTERY_CUT_START,
-  FOC_HALL_TABLE_7,
   P_PID_KI,
   M_INVERT_DIRECTION,
   FOC_SL_D_CURRENT_DUTY,
@@ -156,16 +141,11 @@ enum mc_config_param ENUM_SIZE {
   FOC_PLL_KI,
   L_WATT_MIN,
 
-
   // These values will each be arrays of 8 bytes
   HALL_TABLE,
   HALL_TABLE_FOC,
-
 };
 
-// The hall table is an array of eight values determined by bldc-tool
-#define HALL_TABLE_SIZE 8
-typedef uint8_t hall_table_t[HALL_TABLE_SIZE];
 
 /**
  *  This struct should be used to give BOTH speed and current commands.
@@ -193,6 +173,14 @@ typedef union {
   mc_config config;
   uint8_t config_bytes[sizeof(mc_config)];
 } mc_config_union;
+
+/**
+ *  The hall table is an array of eight values determined by bldc-tool.
+ *  HALL_TABLE     is in range [-1, 6]
+ *  HALL_TABLE_FOC is in range [0, 255]
+ */
+#define HALL_TABLE_SIZE 8
+typedef short int hall_table_t[HALL_TABLE_SIZE];
 
 /**
  *  Hall tables (for both FOC and BLDC) consist of 8 values. If we included these in the mc_config_union,
