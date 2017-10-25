@@ -848,19 +848,19 @@ volatile float *getParamPtr(enum mc_config_param param)
     case L_IN_CURRENT_MAX:
       return &mcconf.l_in_current_max;
     case OPENLOOP_HYST:
-      return &mcconf.foc_openloop_hyst;
+      return &mcconf.foc_sl_openloop_hyst;
     case ENCODER_OFFSET:
       return &mcconf.foc_encoder_offset;
     case MOTOR_QUALITY_BEARINGS:
       return &mcconf.motor_quality_bearings;
-    case TEMP_FET_END:
+    case L_TEMP_FET_END:
       return &mcconf.l_temp_fet_end;
     case MOTOR_QUALITY_MAGNETS:
       return &mcconf.motor_quality_magnets;
     case ENCODER_INVERTED:
       return &mcconf.foc_encoder_inverted;
     case OPENLOOP_TIME:
-      return &mcconf.foc_openloop_time;
+      return &mcconf.foc_sl_openloop_time;
     case SL_MIN_ERPM:
       return &mcconf.sl_min_erpm;
     case BATTERY_CUT_END:
@@ -1022,7 +1022,7 @@ volatile float *getParamPtr(enum mc_config_param param)
     case S_PID_KP:
       return &mcconf.s_pid_kp;
     case FOC_DUTY_DOWNRAMP_KP:
-      return &mcconf.foc_duty_dowmramp_kp:
+      return &mcconf.foc_duty_dowmramp_kp;
     case L_CURRENT_MIN:
       return &mcconf.l_current_min;
     case FOC_ENCODER_RATIO:
@@ -1034,7 +1034,7 @@ volatile float *getParamPtr(enum mc_config_param param)
     case SL_BEMF_COUPLING_K:
       return &mcconf.sl_bemf_coupling_k;
     case MOTOR_SENSOR_TYPE: 
-      return &mcconf.motor_sensor_type;
+      return &mcconf.sensor_mode;
     case MOTOR_MODEL:
       return &mcconf.motor_model;
     case SL_MIN_ERPM_CYCLE_INT_LIMIT:
