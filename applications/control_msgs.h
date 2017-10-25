@@ -25,7 +25,8 @@ enum mc_packet_type ENUM_SIZE {
   CONFIG_READ,
   STATUS_DATA,
   CONTROL_WRITE,
-  CONFIG_WRITE
+  CONFIG_WRITE,
+  CONFIG_WRITE_HALL // only for HALL_TABLE and HALL_TABLE_FOC
 };
 
 // An enum to differentiate control modes
@@ -165,7 +166,12 @@ typedef union {
 } mc_cmd_union;
 
 typedef struct {
-  float value_f;
+  union {
+    float    value_f;
+    int32_t  value_i;
+    uint8_t  value_byte;
+    uint32_t value_ui; // value_unsigned_int
+  };
   enum mc_config_param param;
 } mc_config;
 
@@ -180,7 +186,8 @@ typedef union {
  *  HALL_TABLE_FOC is in range [0, 255]
  */
 #define HALL_TABLE_SIZE 8
-typedef short int hall_table_t[HALL_TABLE_SIZE];
+typedef int8_t  hall_table_t[HALL_TABLE_SIZE];
+typedef uint8_t hall_table_foc_t[HALL_TABLE_SIZE];
 
 /**
  *  Hall tables (for both FOC and BLDC) consist of 8 values. If we included these in the mc_config_union,
@@ -188,7 +195,10 @@ typedef short int hall_table_t[HALL_TABLE_SIZE];
  *  The enum and union below were introduced to avoid that situation.
  */
 typedef struct {
-  hall_table_t hall_values;
+  union {
+    hall_table_t hall_values;
+    hall_table_foc_t hall_foc_values;
+  };
   enum mc_config_param param;
 } mc_config_hall;
 
