@@ -4,6 +4,7 @@ APPSRC =	applications/app.c \
 			applications/app_sten.c \
 			applications/app_uartcomm.c \
 			applications/app_nunchuk.c \
-			applications/app_custom.c
+			applications/app_custom.c \
+			applications/uart_mc_config.c
 
 APPINC = applications
