@@ -3,22 +3,31 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef ARDUINO
-#define ENUM_SIZE : uint8_t
-#else 
-#define ENUM_SIZE
+#ifdef PLATFORM_IS_LINUX
+  #define ENUM_SIZE : uint8_t
+#else
+  #define ENUM_SIZE 
 #endif
 
 /***************************
  * VESC REQUEST DATATYPES  *
  ***************************/
-// An enum to differentiate the type of request
+
+/**
+ * An enum to differentiate the type of request.
+ * 
+ * - Status and feedback are sent from VESC -> Linux
+ * - CONTROL_WRITE, and CONFIG_WRITE are sent from Linux -> VESC  
+ * - CONFIG_READ is sent in both directions (Linux -> VESC query as well as VESC -> Linux response)
+ */
 enum mc_packet_type ENUM_SIZE {
   FEEDBACK_DATA = 1,
   CONFIG_READ,
   STATUS_DATA,
   CONTROL_WRITE,
-  CONFIG_WRITE
+  CONFIG_WRITE,
+  CONFIG_WRITE_HALL, // only for HALL_TABLE and HALL_TABLE_FOC
+  COMMIT_MC_CONFIG,  // use after many CONFIG_WRITE*s in order to actually effect the changes
 };
 
 // An enum to differentiate control modes
@@ -35,62 +44,169 @@ enum mc_control_mode ENUM_SIZE {
 // use value_f in request
 // use value in config_value response
 enum mc_config_param ENUM_SIZE {
-  FOC_KP = 1, 
-  FOC_KI,
-  MOTOR_L,
-  MOTOR_R,
-  MOTOR_FLUX,
-  OBSERVER_GAIN,
-  MAX_CURRENT,
-  MIN_CURRENT,
-  POS_PID_KP,
-  POS_PID_KI,
-  POS_PID_KD,
-  SPEED_PID_KP,
-  SPEED_PID_KI,
-  SPEED_PID_KD,
-  SPEED_PID_MIN_RPM,
-  HALL_TABLE // use hall_table
+  L_CURRENT_MAX = 1,
+  M_SENSOR_PORT_MODE,
+  OBSERVER_GAIN_SLOW,
+  FOC_PLL_KP,
+  SL_CYCLE_INT_RPM,
+  M_DRV8301_OC_ADJ,
+  L_IN_CURRENT_MAX,
+  OPENLOOP_HYST,
+  ENCODER_OFFSET,
+  MOTOR_QUALITY_BEARINGS,
+  L_TEMP_FET_END,
+  MOTOR_QUALITY_MAGNETS,
+  ENCODER_INVERTED,
+  OPENLOOP_TIME,
+  SL_MIN_ERPM,
+  BATTERY_CUT_END,
+  FOC_OBSERVER_GAIN,
+  PID_ALLOW_BRAKING,
+  WATT_MAX,
+  SL_CYCLE_INT_LIMIT,
+  FOC_CURRENT_KI,
+  MAX_EPRM_FBRAKE_CC,
+  MIN_DUTY,
+  FOC_CURRENT_KP,
+  DUTY_RAMP_STEP,
+  FOC_SAMPLE_V0_V7,
+  ABS_CURRENT_MAX,
+  FOC_TEMP_COMP,
+  S_PID_MIN_ERPM,
+  M_NTC_MOTOR_BETA,
+  MAX_DUTY,
+  MOTOR_FLUX_LINKAGE,
+  MAX_ERPM_FBRAKE,
+  HALL_SL_ERPM,
+  FOC_SL_D_CURRENT_FACTOR,
+  CC_MIN_CURRENT,
+  CC_RAMP_STEP_MAX,
+  SENSOR_MODE,
+  FOC_SAMPLE_HIGH_CURRENT,
+  L_ERPM_START,
+  FOC_DT_US,
+  CC_GAIN,
+  M_ENCODER_COUNTS,
+  L_MAX_VIN,
+  HALL_TABLE_0,
+  M_BLDC_F_SW_MIN,
+  MOTOR_WEIGHT,
+  PWM_MODE,
+  P_PID_KD,
+  L_TEMP_MOTOR_END,
+  FOC_SAT_COMP,
+  P_PID_ANG_DIV,
+  MAX_FULLBREAK_CURRENT_DIR_CHANGE,
+  L_BATTERY_CUT_START,
+  P_PID_KI,
+  M_INVERT_DIRECTION,
+  FOC_SL_D_CURRENT_DUTY,
+  MOTOR_TYPE,
+  CC_STARTUP_BOOST_DUTY,
+  FOC_TEMP_COMP_BASE_TEMP,
+  P_PID_KP,
+  L_MIN_ERPM,
+  FOC_SL_ERPM,
+  M_FAULT_STOP_TIME_MS,
+  MOTOR_BRAND,
+  M_BLDC_F_SW_MAX,
+  S_PID_KD,
+  L_TEMP_FET_START,
+  L_MAX_ERPM,
+  SL_PHASE_ADVANCE_AT_BR,
+  FOC_MOTOR_L,
+  S_PID_KI,
+  M_DRV8301_OC_MODE,
+  L_MIN_VIN,
+  FOC_MOTOR_R,
+  FOC_DUTY_DOWNRAMP_KI,
+  COMM_MODE,
+  MOTOR_QUALITY_CONSTRUCTION,
+  S_PID_KP,
+  FOC_DUTY_DOWNRAMP_KP,
+  L_CURRENT_MIN,
+  FOC_ENCODER_RATIO,
+  L_IN_CURRENT_MIN,
+  M_CURRENT_BACKOFF_GAIN,
+  SL_BEMF_COUPLING_K,
+  MOTOR_SENSOR_TYPE,
+  MOTOR_MODEL,
+  SL_MIN_ERPM_CYCLE_INT_LIMIT,
+  L_TEMP_MOTOR_START,
+  OPENLOOP_RPM,
+  L_SLOW_ABS_CURRENT,
+  FOC_SENSOR_MODE,
+  MOTOR_LOSS_TORQUE,
+  M_DC_F_SW,
+  FOC_F_SW,
+  MOTOR_POLES,
+  FOC_PLL_KI,
+  L_WATT_MIN,
+
+  // These values will each be arrays of 8 bytes
+  HALL_TABLE,
+  HALL_TABLE_FOC,
 };
 
-// The hall table is an array of eight values determined by bldc-tool
-#define HALL_TABLE_SIZE 8
-typedef uint8_t hall_table_t[HALL_TABLE_SIZE];
 
-// A struct that represents the received requests
+/**
+ *  This struct should be used to give BOTH speed and current commands.
+ */
 typedef struct {
   union {
-    int32_t value_i; 
-    float value_f;
-    hall_table_t value_hall; // Only used for CONFIG_WRITE HALL_TABLE
+    float target_cmd_f;
+    int32_t target_cmd_i;
   };
+  float current_limit;
+  enum mc_control_mode control_mode;
+} mc_cmd;
+
+typedef union {
+  mc_cmd cmd;
+  uint8_t cmd_bytes[sizeof(mc_cmd)];
+} mc_cmd_union;
+
+typedef struct {
   union {
-    enum mc_control_mode control;
-    enum mc_config_param param;
+    float    value_f;
+    int32_t  value_i;
+    uint8_t  value_byte;
+    uint32_t value_ui; // value_unsigned_int
   };
-  enum mc_packet_type type;
-} mc_request;
+  enum mc_config_param param;
+} mc_config;
 
-// A union to simplify sending a request over i2c
 typedef union {
-  mc_request request;
-  uint8_t request_bytes[sizeof(mc_request)];
-} mc_request_union;
-
-/*************************
- * VESC CONFIG DATATYPES *
- *************************/
-// the struct that represents the current configuration for a parameter
-typedef union {
-  hall_table_t hall_table;
-  float value;
-} mc_config_value;
-
-// a union to simplify transferring config values over i2c
-typedef union {
-  mc_config_value value;
-  uint8_t value_bytes[sizeof(mc_config_value)];
+  mc_config config;
+  uint8_t config_bytes[sizeof(mc_config)];
 } mc_config_union;
+
+/**
+ *  The hall table is an array of eight values determined by bldc-tool.
+ *  HALL_TABLE     is in range [-1, 6]
+ *  HALL_TABLE_FOC is in range [0, 255]
+ */
+#define HALL_TABLE_SIZE 8
+typedef int8_t  hall_table_t[HALL_TABLE_SIZE];
+typedef uint8_t hall_table_foc_t[HALL_TABLE_SIZE];
+
+/**
+ *  Hall tables (for both FOC and BLDC) consist of 8 values. If we included these in the mc_config_union,
+ *  all values would be forced to be the size of the largest transaction - hall table config writes.
+ *  The enum and union below were introduced to avoid that situation.
+ */
+typedef struct {
+  union {
+    hall_table_t hall_values;
+    hall_table_foc_t hall_foc_values;
+  };
+  enum mc_config_param param;
+} mc_config_hall;
+
+typedef union {
+  mc_config_hall config;
+  uint8_t config_bytes[sizeof(mc_config_hall)];
+} mc_config_hall_union;
  
 /***************************
  * VESC FEEDBACK DATATYPES *
