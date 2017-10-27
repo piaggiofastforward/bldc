@@ -32,6 +32,11 @@ enum mc_packet_type ENUM_SIZE {
   RESPONSE_DETECT_HALL_FOC, // use for response containing foc hall table data
 };
 
+/**
+ *  1 byte (success/fail) + 8 value bytes
+ */
+#define RESPONSE_DETECT_HALL_FOC_SIZE 9
+
 // An enum to differentiate control modes
 enum mc_control_mode ENUM_SIZE {
   SPEED = 1, // use value_i

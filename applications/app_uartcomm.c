@@ -99,6 +99,7 @@ static volatile mc_configuration mcconf;
  * Forward declare various handlers.
  */
 static void initHardware(void);
+static void detectHallTableFoc(void);
 static void setHall(hall_table_t hall_table);
 static void setHallFoc(hall_table_foc_t hall_table);
 static void setCommand(void);
@@ -350,6 +351,14 @@ static void process_packet(unsigned char *data, unsigned int len)
 
     case COMMIT_MC_CONFIG:
       commitConfigReceived = true;
+      break;
+
+    case REQUEST_DETECT_HALL_FOC:
+
+      // dont do things (like send feedback and accept commands to drive the motor!!!) when
+      chSysDisable();
+      detectHallTableFoc();
+      chSysEnable();
       break;
 
 		default:
@@ -719,6 +728,44 @@ static void setHallFoc(hall_table_foc_t hall_table)
 {
   memcpy((void *) mcconf.foc_hall_table, hall_table, HALL_TABLE_SIZE);
 }
+
+/**
+ *  Similar to the VESC tool, perform a detection routine for FOC hall table values.
+ *  The payload of the response is as follows:
+ *
+ *    - 1 byte  (indicating success or failure of the detection routine)
+ *    - 8 bytes (hall table values)
+ */
+static void detectHallTableFoc(void)
+{
+  int index;
+  mc_configuration mcconf_old;
+  if (mcconf.m_sensor_port_mode == SENSOR_PORT_MODE_HALL)
+  {
+    mcconf_old = mcconf;
+    index = 0;
+    float current = 10.0;
+
+    mcconf.motor_type = MOTOR_TYPE_FOC;
+    mcconf.foc_f_sw = 10000.0;
+    mcconf.foc_current_kp = 0.01;
+    mcconf.foc_current_ki = 10.0;
+    mc_interface_set_configuration(&mcconf);
+
+    uint8_t hall_tab[8];
+    bool res = mcpwm_foc_hall_detect(current, hall_tab);
+    mc_interface_set_configuration(&mcconf_old);
+
+    uint8_t response[RESPONSE_DETECT_HALL_FOC_SIZE + 1]; // +1 for packet ID
+    index = 0;
+    response[index++] = RESPONSE_DETECT_HALL_FOC;
+    memcpy(response + index, hall_tab, 8);
+    index += 8;
+    response[index++] = res ? 1 : 0;
+    send_packet_wrapper(response, 10);
+  }
+}
+
 
 
 /*
