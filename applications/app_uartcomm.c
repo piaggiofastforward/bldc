@@ -127,6 +127,13 @@ void sendStatus(void);
 void updateStatus(void);
 
 /**
+ *  Enable/disable the virtual timer interrupts that prompt us to send feedback/status data. This 
+ *  will be used when we get an FOC detection request.
+ */
+static void disablePublishing(void);
+static void enablePublishing(void);
+
+/**
  * The functions that set the flags which prompt us to write status/feedback in the
  * main loop will be called at these rates. Therefore, these rates should be set slightly
  * below the desired write rate since there is a small latency between the time the flag
@@ -356,9 +363,10 @@ static void process_packet(unsigned char *data, unsigned int len)
     case REQUEST_DETECT_HALL_FOC:
 
       // dont do things (like send feedback and accept commands to drive the motor!!!) when
-      chSysDisable();
+      disablePublishing();
       detectHallTableFoc();
-      chSysEnable();
+      chThdSleepMilliseconds(200);
+      enablePublishing();
       break;
 
 		default:
@@ -618,6 +626,19 @@ void confirmationEcho()
   send_packet_wrapper(confirmationBuf, 3);
 }
 
+// stop the timer interrupts that cause us to gather and publish feedback data
+static void disablePublishing(void)
+{
+  chVTReset(&feedback_task_vt);
+  chVTReset(&status_task_vt);
+}
+
+static void enablePublishing(void)
+{
+  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+}
+
 /**
  * Set flags to indicate that we should publish feedback or status, handle in main thread.
  */
@@ -740,10 +761,9 @@ static void detectHallTableFoc(void)
 {
   int index;
   mc_configuration mcconf_old, mcconf_curr;
-  mcconf_curr = mcconf;
   if (mcconf.m_sensor_port_mode == SENSOR_PORT_MODE_HALL)
   {
-    mcconf_old = mcconf_curr;
+    mcconf_old = mcconf_curr = mcconf;
     float current = 10.0;
 
     mcconf_curr.motor_type = MOTOR_TYPE_FOC;
