@@ -103,6 +103,7 @@ static void detectHallTableFoc(void);
 static void setHall(hall_table_t hall_table);
 static void setHallFoc(hall_table_foc_t hall_table);
 static void setCommand(void);
+static void sendConfigCommitConfirmation(void);
 static int getStringPotValue(void);
 volatile float *getParamPtr(enum mc_config_param param);
 int32_t descale_position(float pos);
@@ -584,19 +585,14 @@ static THD_FUNCTION(packet_process_thread, arg)
 
     if (commitConfigReceived)
     {
+      disablePublishing();
       conf_general_store_mc_configuration((mc_configuration *) &mcconf);
       mc_interface_set_configuration((mc_configuration *) &mcconf);
       chThdSleepMilliseconds(500);
+      sendConfigCommitConfirmation();
       commitConfigReceived = false;
+      enablePublishing();
     }
-
-		// if (updateConfigReceived)
-		// {
-		// 	// do stuff
-		// 	mc_interface_set_configuration((mc_configuration *) &mcconf);
-		// 	conf_general_store_mc_configuration((mc_configuration *) &mcconf);
-		// 	updateConfigReceived = false;
-		// }
 	}
 }
 
@@ -624,6 +620,16 @@ void confirmationEcho()
 {
   uint8_t confirmationBuf[3] = {0, 0, 0};
   send_packet_wrapper(confirmationBuf, 3);
+}
+
+/**
+ *  After committing some mc_configuration changes, send data back to the host to verify that
+ *  it has been completed.
+ */
+static void sendConfigCommitConfirmation(void)
+{
+  uint8_t data[2] = { COMMIT_MC_CONFIG, 1 };
+  send_packet_wrapper(data, 2);
 }
 
 // stop the timer interrupts that cause us to gather and publish feedback data
