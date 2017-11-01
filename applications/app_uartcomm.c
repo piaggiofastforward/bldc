@@ -739,18 +739,18 @@ static void setHallFoc(hall_table_foc_t hall_table)
 static void detectHallTableFoc(void)
 {
   int index;
-  mc_configuration mcconf_old;
+  mc_configuration mcconf_old, mcconf_curr;
+  mcconf_curr = mcconf;
   if (mcconf.m_sensor_port_mode == SENSOR_PORT_MODE_HALL)
   {
-    mcconf_old = mcconf;
-    index = 0;
+    mcconf_old = mcconf_curr;
     float current = 10.0;
 
-    mcconf.motor_type = MOTOR_TYPE_FOC;
-    mcconf.foc_f_sw = 10000.0;
-    mcconf.foc_current_kp = 0.01;
-    mcconf.foc_current_ki = 10.0;
-    mc_interface_set_configuration(&mcconf);
+    mcconf_curr.motor_type = MOTOR_TYPE_FOC;
+    mcconf_curr.foc_f_sw = 10000.0;
+    mcconf_curr.foc_current_kp = 0.01;
+    mcconf_curr.foc_current_ki = 10.0;
+    mc_interface_set_configuration(&mcconf_curr);
 
     uint8_t hall_tab[8];
     bool res = mcpwm_foc_hall_detect(current, hall_tab);
@@ -765,8 +765,6 @@ static void detectHallTableFoc(void)
     send_packet_wrapper(response, 10);
   }
 }
-
-
 
 /*
  * Returns the absolute position in ticks based on the min and max limits

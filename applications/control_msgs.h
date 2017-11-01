@@ -33,7 +33,7 @@ enum mc_packet_type ENUM_SIZE {
 };
 
 /**
- *  1 byte (success/fail) + 8 value bytes
+ *  8 value bytes + 1 byte (success/fail)
  */
 #define RESPONSE_DETECT_HALL_FOC_SIZE 9
 
