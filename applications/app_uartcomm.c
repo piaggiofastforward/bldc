@@ -99,9 +99,11 @@ static volatile mc_configuration mcconf;
  * Forward declare various handlers.
  */
 static void initHardware(void);
+static void detectHallTableFoc(void);
 static void setHall(hall_table_t hall_table);
 static void setHallFoc(hall_table_foc_t hall_table);
 static void setCommand(void);
+static void sendConfigCommitConfirmation(void);
 static int getStringPotValue(void);
 volatile float *getParamPtr(enum mc_config_param param);
 int32_t descale_position(float pos);
@@ -118,12 +120,29 @@ void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
  */
 static virtual_timer_t feedback_task_vt;
 static virtual_timer_t status_task_vt;
+#define isPublishing() (chVTIsArmedI(&feedback_task_vt) || chVTIsArmedI(&status_task_vt))
+
 static void feedbackTaskCb(void* _);
 static void statusTaskCb(void* _);
 void sendFeedback(void);
 void updateFeedback(void);
 void sendStatus(void);
 void updateStatus(void);
+
+/**
+ *  Enable/disable the virtual timer interrupts that prompt us to send feedback/status data. This 
+ *  will be used when we get an FOC detection request.
+ */
+static void disablePublishing(void);
+static void enablePublishing(void);
+
+/**
+ *  Use this to aid in stopping/starting publishing when we receive a CONFIG_WRITE command.
+ *  Schedule publishing to start up again in the amount of time below.
+ */
+static virtual_timer_t start_pub_task_vt;
+static void startPubTaskCb(void* _);
+#define DELAY_CONFIG_WRITE_START_PUB_MS 50
 
 /**
  * The functions that set the flags which prompt us to write status/feedback in the
@@ -335,6 +354,12 @@ static void process_packet(unsigned char *data, unsigned int len)
 			break;
 
 		case CONFIG_WRITE:
+      if (isPublishing())
+      {
+        disablePublishing();
+      }
+      // start publishing again if we dont receive a config within 50 ms
+      chVTSet(&start_pub_task_vt, MS2ST(DELAY_CONFIG_WRITE_START_PUB_MS), startPubTaskCb, NULL);
       memcpy(config.config_bytes, data + 1, sizeof(mc_config));
       setParameter(config.config, &mcconf);
 			// updateConfigReceived = true;
@@ -349,7 +374,22 @@ static void process_packet(unsigned char *data, unsigned int len)
       break;
 
     case COMMIT_MC_CONFIG:
+      if (isPublishing())
+      {
+        disablePublishing();
+      }
+      // at this point, dont start publishing until after we send the confirmation response
+      chVTReset(&start_pub_task_vt);
       commitConfigReceived = true;
+      break;
+
+    case REQUEST_DETECT_HALL_FOC:
+
+      // dont do things (like send feedback and accept commands to drive the motor!!!)
+      disablePublishing();
+      detectHallTableFoc();
+      chThdSleepMilliseconds(200);
+      enablePublishing();
       break;
 
 		default:
@@ -464,6 +504,7 @@ static THD_FUNCTION(packet_process_thread, arg)
    * and shouldSendStatus flags in an interrupt context, and we will do the actual data transmission
    * in the main thread.
    */
+  chVTObjectInit(&start_pub_task_vt);
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
   chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
@@ -567,19 +608,14 @@ static THD_FUNCTION(packet_process_thread, arg)
 
     if (commitConfigReceived)
     {
+      disablePublishing();
       conf_general_store_mc_configuration((mc_configuration *) &mcconf);
       mc_interface_set_configuration((mc_configuration *) &mcconf);
       chThdSleepMilliseconds(500);
+      sendConfigCommitConfirmation();
       commitConfigReceived = false;
+      enablePublishing();
     }
-
-		// if (updateConfigReceived)
-		// {
-		// 	// do stuff
-		// 	mc_interface_set_configuration((mc_configuration *) &mcconf);
-		// 	conf_general_store_mc_configuration((mc_configuration *) &mcconf);
-		// 	updateConfigReceived = false;
-		// }
 	}
 }
 
@@ -607,6 +643,40 @@ void confirmationEcho()
 {
   uint8_t confirmationBuf[3] = {0, 0, 0};
   send_packet_wrapper(confirmationBuf, 3);
+}
+
+/**
+ *  After committing some mc_configuration changes, send data back to the host to verify that
+ *  it has been completed.
+ */
+static void sendConfigCommitConfirmation(void)
+{
+  uint8_t data[2] = { COMMIT_MC_CONFIG, 1 };
+  send_packet_wrapper(data, 2);
+}
+
+// stop the timer interrupts that cause us to gather and publish feedback data
+static void disablePublishing(void)
+{
+  chVTReset(&feedback_task_vt);
+  chVTReset(&status_task_vt);
+}
+
+static void enablePublishing(void)
+{
+  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+}
+
+/**
+ * Set flags to indicate that we should publish feedback or status, handle in main thread.
+ */
+static void startPubTaskCb(void* _)
+{
+  (void)_;
+  chSysLockFromISR();
+  enablePublishing();
+  chSysUnlockFromISR();
 }
 
 /**
@@ -720,6 +790,41 @@ static void setHallFoc(hall_table_foc_t hall_table)
   memcpy((void *) mcconf.foc_hall_table, hall_table, HALL_TABLE_SIZE);
 }
 
+/**
+ *  Similar to the VESC tool, perform a detection routine for FOC hall table values.
+ *  The payload of the response is as follows:
+ *
+ *    - 1 byte  (indicating success or failure of the detection routine)
+ *    - 8 bytes (hall table values)
+ */
+static void detectHallTableFoc(void)
+{
+  int index;
+  mc_configuration mcconf_old, mcconf_curr;
+  if (mcconf.m_sensor_port_mode == SENSOR_PORT_MODE_HALL)
+  {
+    mcconf_old = mcconf_curr = mcconf;
+    float current = 10.0;
+
+    mcconf_curr.motor_type = MOTOR_TYPE_FOC;
+    mcconf_curr.foc_f_sw = 10000.0;
+    mcconf_curr.foc_current_kp = 0.01;
+    mcconf_curr.foc_current_ki = 10.0;
+    mc_interface_set_configuration(&mcconf_curr);
+
+    uint8_t hall_tab[8];
+    bool res = mcpwm_foc_hall_detect(current, hall_tab);
+    mc_interface_set_configuration(&mcconf_old);
+
+    uint8_t response[RESPONSE_DETECT_HALL_FOC_SIZE + 1]; // +1 for packet ID
+    index = 0;
+    response[index++] = RESPONSE_DETECT_HALL_FOC;
+    memcpy(response + index, hall_tab, 8);
+    index += 8;
+    response[index++] = res ? 1 : 0;
+    send_packet_wrapper(response, 10);
+  }
+}
 
 /*
  * Returns the absolute position in ticks based on the min and max limits

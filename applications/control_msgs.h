@@ -26,9 +26,16 @@ enum mc_packet_type ENUM_SIZE {
   STATUS_DATA,
   CONTROL_WRITE,
   CONFIG_WRITE,
-  CONFIG_WRITE_HALL, // only for HALL_TABLE and HALL_TABLE_FOC
-  COMMIT_MC_CONFIG,  // use after many CONFIG_WRITE*s in order to actually effect the changes
+  CONFIG_WRITE_HALL,        // only for HALL_TABLE and HALL_TABLE_FOC
+  COMMIT_MC_CONFIG,         // use after many CONFIG_WRITE*s in order to actually effect the changes
+  REQUEST_DETECT_HALL_FOC,  // use to perform FOC hall table calibration routine
+  RESPONSE_DETECT_HALL_FOC, // use for response containing foc hall table data
 };
+
+/**
+ *  8 value bytes + 1 byte (success/fail)
+ */
+#define RESPONSE_DETECT_HALL_FOC_SIZE 9
 
 // An enum to differentiate control modes
 enum mc_control_mode ENUM_SIZE {
