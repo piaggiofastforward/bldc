@@ -120,6 +120,8 @@ void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
  */
 static virtual_timer_t feedback_task_vt;
 static virtual_timer_t status_task_vt;
+#define isPublishing() (chVTIsArmedI(&feedback_task_vt) || chVTIsArmedI(&status_task_vt))
+
 static void feedbackTaskCb(void* _);
 static void statusTaskCb(void* _);
 void sendFeedback(void);
@@ -133,6 +135,14 @@ void updateStatus(void);
  */
 static void disablePublishing(void);
 static void enablePublishing(void);
+
+/**
+ *  Use this to aid in stopping/starting publishing when we receive a CONFIG_WRITE command.
+ *  Schedule publishing to start up again in the amount of time below.
+ */
+static virtual_timer_t start_pub_task_vt;
+static void startPubTaskCb(void* _);
+#define DELAY_CONFIG_WRITE_START_PUB_MS 50
 
 /**
  * The functions that set the flags which prompt us to write status/feedback in the
@@ -344,6 +354,12 @@ static void process_packet(unsigned char *data, unsigned int len)
 			break;
 
 		case CONFIG_WRITE:
+      if (isPublishing())
+      {
+        disablePublishing();
+      }
+      // start publishing again if we dont receive a config within 50 ms
+      chVTSet(&start_pub_task_vt, MS2ST(DELAY_CONFIG_WRITE_START_PUB_MS), startPubTaskCb, NULL);
       memcpy(config.config_bytes, data + 1, sizeof(mc_config));
       setParameter(config.config, &mcconf);
 			// updateConfigReceived = true;
@@ -358,12 +374,18 @@ static void process_packet(unsigned char *data, unsigned int len)
       break;
 
     case COMMIT_MC_CONFIG:
+      if (isPublishing())
+      {
+        disablePublishing();
+      }
+      // at this point, dont start publishing until after we send the confirmation response
+      chVTReset(&start_pub_task_vt);
       commitConfigReceived = true;
       break;
 
     case REQUEST_DETECT_HALL_FOC:
 
-      // dont do things (like send feedback and accept commands to drive the motor!!!) when
+      // dont do things (like send feedback and accept commands to drive the motor!!!)
       disablePublishing();
       detectHallTableFoc();
       chThdSleepMilliseconds(200);
@@ -482,6 +504,7 @@ static THD_FUNCTION(packet_process_thread, arg)
    * and shouldSendStatus flags in an interrupt context, and we will do the actual data transmission
    * in the main thread.
    */
+  chVTObjectInit(&start_pub_task_vt);
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
   chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
@@ -643,6 +666,17 @@ static void enablePublishing(void)
 {
   chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
   chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+}
+
+/**
+ * Set flags to indicate that we should publish feedback or status, handle in main thread.
+ */
+static void startPubTaskCb(void* _)
+{
+  (void)_;
+  chSysLockFromISR();
+  enablePublishing();
+  chSysUnlockFromISR();
 }
 
 /**
