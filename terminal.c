@@ -263,6 +263,9 @@ void terminal_process_string(char *str) {
 		} else {
 			commands_printf("This command requires one argument.\n");
 		}
+	} else if (strcmp(argv[0], "enc_abs_ticks") == 0) {
+		enc_abs_count_t counts = encoder_abs_count();
+		commands_printf("%lu\n", counts);
 	} else if (strcmp(argv[0], "measure_res") == 0) {
 		if (argc == 2) {
 			float current = -1.0;
@@ -611,6 +614,9 @@ void terminal_process_string(char *str) {
 
 		commands_printf("foc_encoder_detect [current]");
 		commands_printf("  Run the motor at 1Hz on open loop and compute encoder settings");
+
+		commands_printf("enc_abs_ticks");
+		commands_printf("  The absolute encoder count since startup");
 
 		commands_printf("measure_res [current]");
 		commands_printf("  Lock the motor with a current and calculate its resistance");
