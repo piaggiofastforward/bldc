@@ -70,6 +70,14 @@ static bool index_found = false;
 static uint32_t enc_counts = 10000;
 static encoder_mode mode = ENCODER_MODE_NONE;
 static float last_enc_angle = 0.0;
+static enc_abs_count_t enc_abs_count = 0;
+static enc_abs_count_t last_enc_count = 0;
+
+/**
+ *  Flag for our absolute counter to indicate whether or not the encoder count has passed through
+ *  the index in the time between this read and the last.
+ */
+static volatile bool enc_cnt_wrap_flag = false;
 
 // Private functions
 static void spi_transfer(uint16_t *in_buf, const uint16_t *out_buf, int length);
@@ -101,6 +109,7 @@ void encoder_init_abi(uint32_t counts) {
 	// Initialize variables
 	index_found = false;
 	enc_counts = counts;
+	enc_abs_count = 0;
 
 	palSetPadMode(HW_HALL_ENC_GPIO1, HW_HALL_ENC_PIN1, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
 	palSetPadMode(HW_HALL_ENC_GPIO2, HW_HALL_ENC_PIN2, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
@@ -200,6 +209,53 @@ float encoder_read_deg(void) {
 	return angle;
 }
 
+enc_abs_count_t encoder_abs_count(void)
+{
+	// find the difference between the encoder count now and the encoder count at the last timer interrupt,
+	// and add that value to the absolute counter
+
+	unsigned int diff;
+
+	// either moving forward + overflow,
+	// or moving backward + underflow
+	unsigned int hw_cnt = HW_ENC_TIM->CNT;
+	if (enc_cnt_wrap_flag)
+	{
+		// overflow
+		if (hw_cnt < last_enc_count)
+		{
+			diff = (hw_cnt - last_enc_count) % enc_counts;
+		}
+
+		// underflow, moving backwards
+		else
+		{
+			diff = (last_enc_count - hw_cnt) % enc_counts;
+		}
+	}
+
+	// no underflow or overflow
+	else
+	{
+		// moving forwards
+		if (hw_cnt > last_enc_count)
+		{
+			diff = hw_cnt - last_enc_count;
+		}
+
+		// moving backwards
+		else
+		{
+			diff = last_enc_count - hw_cnt;
+		}
+	}
+
+	enc_cnt_wrap_flag = false;
+	last_enc_count = HW_ENC_TIM->CNT;
+	enc_abs_count += diff;
+	return enc_abs_count;
+}
+
 /**
  * Reset the encoder counter. Should be called from the index interrupt.
  */
@@ -230,6 +286,7 @@ void encoder_reset(void) {
 		} else {
 			HW_ENC_TIM->CNT = 0;
 			index_found = true;
+			enc_cnt_wrap_flag = true;
 			bad_pulses = 0;
 		}
 	}
