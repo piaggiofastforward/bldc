@@ -162,7 +162,7 @@ volatile bool shouldSendFeedback = false;
  */
 #define GET_ENC_TICKS_RATE_MS 5
 static virtual_timer_t get_encoder_ticks_task;
-static volatile enc_abs_count_t encoder_abs_ticks;
+static volatile enc_abs_count_t encoder_abs_ticks = 0;
 static volatile bool shouldReadEncTicks = false;
 static void getTicksCb(void* _);
 
