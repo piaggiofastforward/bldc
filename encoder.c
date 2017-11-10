@@ -193,9 +193,35 @@ bool encoder_is_configured(void) {
 float encoder_read_deg(void) {
 	static float angle = 0.0;
 
+	const unsigned int hw_cnt = HW_ENC_TIM->CNT;
+	const unsigned int lim = enc_counts / 100;
+	unsigned int diff;
 	switch (mode) {
 	case ENCODER_MODE_ABI:
-		angle = ((float)HW_ENC_TIM->CNT * 360.0) / (float)enc_counts;
+
+		if (hw_cnt > last_enc_count)
+		{
+			// moving forwards
+			if (hw_cnt - last_enc_count < lim)
+				diff = hw_cnt - last_enc_count;
+			// moving backwards -> underflow
+			else
+				diff = ((int)last_enc_count - (int)hw_cnt) % enc_counts;
+
+		}
+		else
+		{
+			// moving backwards
+			if (last_enc_count - hw_cnt < lim)
+				diff = last_enc_count - hw_cnt;
+
+			// moving forwards -> overflow
+			else
+				diff = ((int)hw_cnt - (int)last_enc_count) % enc_counts;
+		}
+		enc_abs_count += diff;
+		last_enc_count = hw_cnt;
+		angle = ((float)hw_cnt * 360.0) / (float)enc_counts;
 		break;
 
 	case ENCODER_MODE_AS5047P_SPI:
@@ -211,50 +237,51 @@ float encoder_read_deg(void) {
 
 enc_abs_count_t encoder_abs_count(void)
 {
-	// find the difference between the encoder count now and the encoder count at the last timer interrupt,
-	// and add that value to the absolute counter
+	// // find the difference between the encoder count now and the encoder count at the last timer interrupt,
+	// // and add that value to the absolute counter
 
-	unsigned int diff;
+	// int diff;
 
-	// either moving forward + overflow,
-	// or moving backward + underflow
-	unsigned int hw_cnt = HW_ENC_TIM->CNT;
-	if (enc_cnt_wrap_flag)
-	{
-		// overflow
-		if (hw_cnt < last_enc_count)
-		{
-			diff = (hw_cnt - last_enc_count) % enc_counts;
-		}
+	// // either moving forward + overflow,
+	// // or moving backward + underflow
+	// unsigned int hw_cnt = HW_ENC_TIM->CNT;
+	// if (enc_cnt_wrap_flag)
+	// {
+	// 	// overflow
+	// 	// 
+	// 	if (hw_cnt < last_enc_count)
+	// 	{
+	// 		diff = ((int)hw_cnt - (int)last_enc_count) % enc_counts;
+	// 	}
 
-		// underflow, moving backwards
-		else
-		{
-			diff = (last_enc_count - hw_cnt) % enc_counts;
-		}
-	}
+	// 	// underflow, moving backwards
+	// 	else
+	// 	{
+	// 		diff = ((int)last_enc_count - (int)hw_cnt) % enc_counts;
+	// 	}
+	// }
 
-	// no underflow or overflow
-	else
-	{
-		// moving forwards
-		if (hw_cnt > last_enc_count)
-		{
-			diff = hw_cnt - last_enc_count;
-		}
+	// // no underflow or overflow
+	// else
+	// {
+	// 	// moving forwards
+	// 	if (hw_cnt > last_enc_count)
+	// 	{
+	// 		diff = hw_cnt - last_enc_count;
+	// 	}
 
-		// moving backwards
-		else
-		{
-			diff = last_enc_count - hw_cnt;
-		}
+	// 	// moving backwards
+	// 	else
+	// 	{
+	// 		diff = last_enc_count - hw_cnt;
+	// 	}
 
-		diff = 0;
-	}
+	// 	// diff = 0;
+	// }
 
-	enc_cnt_wrap_flag = false;
-	last_enc_count = HW_ENC_TIM->CNT;
-	enc_abs_count += diff;
+	// enc_cnt_wrap_flag = false;
+	// last_enc_count = HW_ENC_TIM->CNT;
+	// enc_abs_count += diff;
 	return enc_abs_count;
 }
 
@@ -276,7 +303,9 @@ void encoder_reset(void) {
 		if (index_found) {
 			// Some plausibility filtering.
 			if (cnt > (enc_counts - lim) || cnt < lim) {
-				HW_ENC_TIM->CNT = 0;
+
+				enc_cnt_wrap_flag = true;
+				// HW_ENC_TIM->CNT = 0;
 				bad_pulses = 0;
 			} else {
 				bad_pulses++;
@@ -286,9 +315,9 @@ void encoder_reset(void) {
 				}
 			}
 		} else {
+			enc_cnt_wrap_flag = true;
 			HW_ENC_TIM->CNT = 0;
 			index_found = true;
-			enc_cnt_wrap_flag = true;
 			bad_pulses = 0;
 		}
 	}

@@ -35,7 +35,7 @@
 #include "control_msgs.h"
 #include "mc_interface.h"  // motor control functions
 #include "timeout.h"       // timeout_reset()
-#include "ext_lld.h"
+// #include "ext_lld.h"
 #include "mcpwm_foc.h"
 #include "uart_mc_config.h"
 #include "encoder.h"
@@ -110,9 +110,9 @@ volatile float *getParamPtr(enum mc_config_param param);
 int32_t descale_position(float pos);
 bool shouldMove(void);
 void homing_sequence(void);
-void toggle_estop(EXTDriver *extp, expchannel_t channel); 
-void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel);
-void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
+// void toggle_estop(EXTDriver *extp, expchannel_t channel); 
+// void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel);
+// void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
 
 
 /**
@@ -203,33 +203,33 @@ void confirmationEcho(void);
 #define FWDLIM_PORT      GPIOA
 #define REVLIM_PORT      GPIOA
 
-static const EXTConfig extcfg = {
-  {
-    {EXT_CH_MODE_DISABLED, NULL},    
-    {EXT_CH_MODE_DISABLED, NULL},    
-    {EXT_CH_MODE_DISABLED, NULL},    
-    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_fwd_limit},
-    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},
-    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_estop},
-    {EXT_CH_MODE_DISABLED, NULL},   
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL}
-  }
-};
+// static const EXTConfig extcfg = {
+//   {
+//     {EXT_CH_MODE_DISABLED, NULL},    
+//     {EXT_CH_MODE_DISABLED, NULL},    
+//     {EXT_CH_MODE_DISABLED, NULL},    
+//     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_fwd_limit},
+//     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},
+//     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_estop},
+//     {EXT_CH_MODE_DISABLED, NULL},   
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL},
+//     {EXT_CH_MODE_DISABLED, NULL}
+//   }
+// };
 
 
 /*
@@ -455,7 +455,7 @@ static void initHardware()
   palSetPadMode(FWDLIM_PORT, FWDLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
   palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
 
-  extStart(&EXTD1, &extcfg);
+  // extStart(&EXTD1, &extcfg);
   estop     = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX)   == PAL_LOW;
   rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
   fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
@@ -911,56 +911,56 @@ bool shouldMove(void)
   return !(isForward ? fwd_limit : rev_limit);
 }
 
-/*
- * Reads the estop value and disables control if it is set
- * Called from interrupt context on both edges
- * Pulldown input, so unless externally pulled up, default value is PAL_LOW
- */
-void toggle_estop(EXTDriver *extp, expchannel_t channel) 
-{
-  (void) extp;
-  (void) channel;
-  estop = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX) == PAL_LOW;
-  // if (estop) {
-  //   mc_interface_set_brake_current(0);
-  // }
-}
+// /*
+//  * Reads the estop value and disables control if it is set
+//  * Called from interrupt context on both edges
+//  * Pulldown input, so unless externally pulled up, default value is PAL_LOW
+//  */
+// void toggle_estop(EXTDriver *extp, expchannel_t channel) 
+// {
+//   (void) extp;
+//   (void) channel;
+//   estop = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX) == PAL_LOW;
+//   // if (estop) {
+//   //   mc_interface_set_brake_current(0);
+//   // }
+// }
 
-/*
- * Reads the forward limit switch. If set and trying to move forward, brake
- * Sets the max_tacho limit
- * Called from interrupt context on both edges
- */
-void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel) 
-{
-  (void) extp;
-  (void) channel;
-  fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
-  if (fwd_limit) {
-    if (!shouldMove()) {
-      // mc_interface_brake_now();
-    }
-    max_tacho = mc_interface_get_tachometer_value(false);
-  }
-}
+// /*
+//  * Reads the forward limit switch. If set and trying to move forward, brake
+//  * Sets the max_tacho limit
+//  * Called from interrupt context on both edges
+//  */
+// void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel) 
+// {
+//   (void) extp;
+//   (void) channel;
+//   fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
+//   if (fwd_limit) {
+//     if (!shouldMove()) {
+//       // mc_interface_brake_now();
+//     }
+//     max_tacho = mc_interface_get_tachometer_value(false);
+//   }
+// }
 
-/*
- * Reads the reverse limit switch. If set and trying to move backwards, brake
- * Sets the min_tacho limit
- * Called from interrupt context on both edges
- */
-void toggle_rev_limit(EXTDriver *extp, expchannel_t channel) 
-{
-  (void) extp;
-  (void) channel;
-  rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
-  if (rev_limit) {
-    if (!shouldMove()) {
-      // mc_interface_brake_now();
-    }
-    min_tacho = mc_interface_get_tachometer_value(false);
-  }
-}
+// /*
+//  * Reads the reverse limit switch. If set and trying to move backwards, brake
+//  * Sets the min_tacho limit
+//  * Called from interrupt context on both edges
+//  */
+// void toggle_rev_limit(EXTDriver *extp, expchannel_t channel) 
+// {
+//   (void) extp;
+//   (void) channel;
+//   rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
+//   if (rev_limit) {
+//     if (!shouldMove()) {
+//       // mc_interface_brake_now();
+//     }
+//     min_tacho = mc_interface_get_tachometer_value(false);
+//   }
+// }
 
 static int getStringPotValue()
 {
