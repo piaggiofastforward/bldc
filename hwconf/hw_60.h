@@ -154,12 +154,12 @@
 #define HW_I2C_SDA_PIN			11
 
 // Hall/encoder pins
-// #define HW_HALL_GPIO1           GPIOA
-// #define HW_HALL_PIN1            5
-// #define HW_HALL_GPIO2           GPIOA
-// #define HW_HALL_PIN2            6
-// #define HW_HALL_GPIO3           GPIOA
-// #define HW_HALL_PIN3            7
+#define HW_HALL_GPIO1           GPIOA
+#define HW_HALL_PIN1            5
+#define HW_HALL_GPIO2           GPIOA
+#define HW_HALL_PIN2            6
+#define HW_HALL_GPIO3           GPIOA
+#define HW_HALL_PIN3            7
 
 #define HW_HALL_ENC_GPIO1		GPIOC
 #define HW_HALL_ENC_PIN1		6
@@ -167,13 +167,6 @@
 #define HW_HALL_ENC_PIN2		7
 #define HW_HALL_ENC_GPIO3		GPIOB
 #define HW_HALL_ENC_PIN3		0
-
-// #define HW_ENC_GPIO1       GPIOC
-// #define HW_ENC_PIN1        6
-// #define HW_ENC_GPIO2       GPIOC
-// #define HW_ENC_PIN2        7
-// #define HW_ENC_GPIO3       GPIOB
-// #define HW_ENC_PIN3        0
 
 
 #define HW_ENC_TIM				TIM3
@@ -230,9 +223,9 @@
 #define ADC_V_ZERO				(ADC_Value[ADC_IND_VIN_SENS] / 2)
 
 // Macros
-#define READ_HALL1()			palReadPad(HW_HALL_ENC_GPIO1, HW_HALL_ENC_PIN1)
-#define READ_HALL2()			palReadPad(HW_HALL_ENC_GPIO2, HW_HALL_ENC_PIN2)
-#define READ_HALL3()			palReadPad(HW_HALL_ENC_GPIO3, HW_HALL_ENC_PIN3)
+#define READ_HALL1()			palReadPad(HW_HALL_GPIO1, HW_HALL_PIN1)
+#define READ_HALL2()			palReadPad(HW_HALL_GPIO2, HW_HALL_PIN2)
+#define READ_HALL3()			palReadPad(HW_HALL_GPIO3, HW_HALL_PIN3)
 
 // Default setting overrides
 #ifndef MCCONF_DEFAULT_MOTOR_TYPE
