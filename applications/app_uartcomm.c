@@ -38,6 +38,7 @@
 #include "ext_lld.h"
 #include "mcpwm_foc.h"
 #include "uart_mc_config.h"
+#include "encoder.h"
 
 // Settings
 #define BAUDRATE					115200
@@ -156,6 +157,14 @@ static void startPubTaskCb(void* _);
 volatile bool shouldSendStatus   = false;
 volatile bool shouldSendFeedback = false;
 
+/**
+ *  Define a timer task to get the absolute encoder ticks at a predefined rate
+ */
+#define GET_ENC_TICKS_RATE_MS 5
+static virtual_timer_t get_ticks_task;
+static volatile enc_abs_count_t enc_abs_ticks;
+static volatile bool shouldReadEncTicks = false;
+static void getTicksCb(void* _);
 
 /**
  * State variables for coordinating cahracters received through rxChar() and through uartStartReceive(),
@@ -500,15 +509,16 @@ static THD_FUNCTION(packet_process_thread, arg)
 	process_tp = chThdGetSelfX();
 
   /**
-   * Initialize timers for feedback and status reports. These timers will set the shouldSendFeedback 
-   * and shouldSendStatus flags in an interrupt context, and we will do the actual data transmission
-   * in the main thread.
+   * Initialize timers for feedback and status reports. These timers will set the shouldSendFeedback,
+   * shouldSendStatus, and shouldReadEncTicks flags in an interrupt context, and we will do the actual
+   * operation in the main thread.
    */
   chVTObjectInit(&start_pub_task_vt);
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
   chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
   chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
+  chVTSetI(&get_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
 
 	while (1)
 	{
@@ -702,6 +712,17 @@ static void statusTaskCb(void* _)
   chSysUnlockFromISR();
 }
 
+static void getTicksCb(void* _)
+{
+	(void) _;
+	shouldReadEncTicks = true;
+	chSysLockFromISR();
+	enc_abs_ticks = encoder_abs_count();
+  chVTSetI(&get_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
+  chEvtSignalI(process_tp, (eventmask_t) 1);
+  chSysUnlockFromISR();
+}
+
 /*
  * Updates the feedback struct with current data
  */ 
@@ -709,7 +730,8 @@ void updateFeedback(void)
 {
   fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
-  fb.feedback.measured_position = mc_interface_get_pid_pos_now();
+  // fb.feedback.measured_position = mc_interface_get_pid_pos_now();
+  fb.feedback.measured_position = enc_abs_ticks;
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
   fb.feedback.switch_flags      = (estop << 2) | (rev_limit << 1) | (fwd_limit); 
