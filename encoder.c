@@ -248,6 +248,8 @@ enc_abs_count_t encoder_abs_count(void)
 		{
 			diff = last_enc_count - hw_cnt;
 		}
+
+		diff = 0;
 	}
 
 	enc_cnt_wrap_flag = false;
