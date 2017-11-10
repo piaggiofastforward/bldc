@@ -2,6 +2,7 @@
 #define __I2C_MSGS_H__
 #include <stdint.h>
 #include <stdbool.h>
+#include "encoder.h"
 
 #ifdef PLATFORM_IS_LINUX
   #define ENUM_SIZE : uint8_t
@@ -223,7 +224,7 @@ typedef struct {
   float motor_current;
   int32_t commanded_value;
   int32_t measured_velocity;
-  int32_t measured_position;
+  enc_abs_count_t measured_position;
   float supply_voltage;
   float supply_current;
   uint32_t switch_flags;
