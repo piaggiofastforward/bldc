@@ -161,8 +161,8 @@ volatile bool shouldSendFeedback = false;
  *  Define a timer task to get the absolute encoder ticks at a predefined rate
  */
 #define GET_ENC_TICKS_RATE_MS 5
-static virtual_timer_t get_ticks_task;
-static volatile enc_abs_count_t enc_abs_ticks;
+static virtual_timer_t get_encoder_ticks_task;
+static volatile enc_abs_count_t encoder_abs_ticks;
 static volatile bool shouldReadEncTicks = false;
 static void getTicksCb(void* _);
 
@@ -196,21 +196,21 @@ void confirmationEcho(void);
  * Pass the GPIO base (eg. GPIO_A) as the first argument to underlying EXTChannelConfig
  * struct, and the index in this EXTConfig instance represents the pin index.
  */
-#define ESTOP_PIN_INDEX  0
-#define FWDLIM_PIN_INDEX 4
-#define REVLIM_PIN_INDEX 5
+#define ESTOP_PIN_INDEX  5
+#define FWDLIM_PIN_INDEX 3
+#define REVLIM_PIN_INDEX 4
 #define ESTOP_PORT       GPIOC
 #define FWDLIM_PORT      GPIOA
 #define REVLIM_PORT      GPIOA
 
 static const EXTConfig extcfg = {
   {
-    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_estop},
     {EXT_CH_MODE_DISABLED, NULL},    
     {EXT_CH_MODE_DISABLED, NULL},    
-    {EXT_CH_MODE_DISABLED, NULL},   
+    {EXT_CH_MODE_DISABLED, NULL},    
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_fwd_limit},
     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},
+    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_estop},
     {EXT_CH_MODE_DISABLED, NULL},   
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
@@ -516,9 +516,10 @@ static THD_FUNCTION(packet_process_thread, arg)
   chVTObjectInit(&start_pub_task_vt);
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
+  chVTObjectInit(&get_encoder_ticks_task);
   chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
   chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
-  chVTSetI(&get_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
+  chVTSet(&get_encoder_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
 
 	while (1)
 	{
@@ -717,8 +718,8 @@ static void getTicksCb(void* _)
 	(void) _;
 	shouldReadEncTicks = true;
 	chSysLockFromISR();
-	enc_abs_ticks = encoder_abs_count();
-  chVTSetI(&get_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
+	encoder_abs_ticks = encoder_abs_count();
+  chVTSetI(&get_encoder_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
   chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
@@ -731,7 +732,7 @@ void updateFeedback(void)
   fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
   // fb.feedback.measured_position = mc_interface_get_pid_pos_now();
-  fb.feedback.measured_position = enc_abs_ticks;
+  fb.feedback.measured_position = encoder_abs_ticks;
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
   fb.feedback.switch_flags      = (estop << 2) | (rev_limit << 1) | (fwd_limit); 
