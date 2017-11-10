@@ -53,15 +53,15 @@
  *
  * @isr
  */
-OSAL_IRQ_HANDLER(Vector58) {
+// OSAL_IRQ_HANDLER(Vector58) {
 
-  OSAL_IRQ_PROLOGUE();
+//   OSAL_IRQ_PROLOGUE();
 
-  EXTI->PR = (1 << 0);
-  EXTD1.config->channels[0].cb(&EXTD1, 0);
+//   EXTI->PR = (1 << 0);
+//   EXTD1.config->channels[0].cb(&EXTD1, 0);
 
-  OSAL_IRQ_EPILOGUE();
-}
+//   OSAL_IRQ_EPILOGUE();
+// }
 
 /**
  * @brief   EXTI[1] interrupt handler.
