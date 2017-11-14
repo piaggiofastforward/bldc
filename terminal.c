@@ -266,6 +266,10 @@ void terminal_process_string(char *str) {
 	} else if (strcmp(argv[0], "enc_abs_ticks") == 0) {
 		enc_abs_count_t counts = encoder_abs_count();
 		commands_printf("%lu\n", counts);
+	} else if (strcmp(argv[0], "enc_index_found") == 0) {
+		commands_printf("%d\n", encoder_index_found());
+	} else if (strcmp(argv[0], "enc_counts_per_rev") == 0) {
+		commands_printf("%d\n", encoder_counts());
 	} else if (strcmp(argv[0], "measure_res") == 0) {
 		if (argc == 2) {
 			float current = -1.0;
@@ -617,6 +621,12 @@ void terminal_process_string(char *str) {
 
 		commands_printf("enc_abs_ticks");
 		commands_printf("  The absolute encoder count since startup");
+
+		commands_printf("enc_counts_per_rev");
+		commands_printf("  Encoder counts per rev");
+
+		commands_printf("enc_index_found");
+		commands_printf("  Has the encoder index been detected?");
 
 		commands_printf("measure_res [current]");
 		commands_printf("  Lock the motor with a current and calculate its resistance");

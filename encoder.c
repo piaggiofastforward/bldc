@@ -18,6 +18,7 @@
     */
 
 #include "encoder.h"
+#include "stdlib.h"
 #include "ch.h"
 #include "hal.h"
 #include "stm32f4xx_conf.h"
@@ -70,20 +71,15 @@ static bool index_found = false;
 static uint32_t enc_counts = 10000;
 static encoder_mode mode = ENCODER_MODE_NONE;
 static float last_enc_angle = 0.0;
-static enc_abs_count_t enc_abs_count = 0;
+static volatile enc_abs_count_t enc_abs_count = 0;
 static enc_abs_count_t last_enc_count = 0;
-
-/**
- *  Flag for our absolute counter to indicate whether or not the encoder count has passed through
- *  the index in the time between this read and the last.
- */
-static volatile bool enc_cnt_wrap_flag = false;
 
 // Private functions
 static void spi_transfer(uint16_t *in_buf, const uint16_t *out_buf, int length);
 static void spi_begin(void);
 static void spi_end(void);
 static void spi_delay(void);
+static void add_encoder_ticks(const unsigned int current_enc_count);
 
 void encoder_deinit(void) {
 	nvicDisableVector(HW_ENC_EXTI_CH);
@@ -194,33 +190,34 @@ float encoder_read_deg(void) {
 	static float angle = 0.0;
 
 	const unsigned int hw_cnt = HW_ENC_TIM->CNT;
-	const unsigned int lim = enc_counts / 100;
-	unsigned int diff;
+	// const unsigned int lim = enc_counts / 100;
+	// unsigned int diff;
 	switch (mode) {
 	case ENCODER_MODE_ABI:
 
-		if (hw_cnt > last_enc_count)
-		{
-			// moving forwards
-			if (hw_cnt - last_enc_count < lim)
-				diff = hw_cnt - last_enc_count;
-			// moving backwards -> underflow
-			else
-				diff = ((int)last_enc_count - (int)hw_cnt) % enc_counts;
+		// if (hw_cnt > last_enc_count)
+		// {
+		// 	// moving forwards
+		// 	if (hw_cnt - last_enc_count < lim)
+		// 		diff = hw_cnt - last_enc_count;
+		// 	// moving backwards -> underflow
+		// 	else
+		// 		diff = ((int)last_enc_count - (int)hw_cnt) % enc_counts;
 
-		}
-		else
-		{
-			// moving backwards
-			if (last_enc_count - hw_cnt < lim)
-				diff = last_enc_count - hw_cnt;
+		// }
+		// else
+		// {
+		// 	// moving backwards
+		// 	if (last_enc_count - hw_cnt < lim)
+		// 		diff = last_enc_count - hw_cnt;
 
-			// moving forwards -> overflow
-			else
-				diff = ((int)hw_cnt - (int)last_enc_count) % enc_counts;
-		}
-		enc_abs_count += diff;
-		last_enc_count = hw_cnt;
+		// 	// moving forwards -> overflow
+		// 	else
+		// 		diff = ((int)hw_cnt - (int)last_enc_count) % enc_counts;
+		// }
+		// enc_abs_count += diff;
+		// last_enc_count = hw_cnt;
+		add_encoder_ticks(hw_cnt);
 		angle = ((float)hw_cnt * 360.0) / (float)enc_counts;
 		break;
 
@@ -235,54 +232,76 @@ float encoder_read_deg(void) {
 	return angle;
 }
 
+/**
+ *  Takes care of all of the logic for keeping track of encoder counts.
+ *
+ *  The first case we check for, "last_enc_count == 0", is to see if the index interrupt
+ *  occurred, since we reset both the HW_ENC_TIM count as well as last_enc_count in response
+ *  to that interrupt.
+ */
+static void add_encoder_ticks(const unsigned int current_enc_count)
+{
+	// find the difference between the encoder count now and the encoder count at the 
+	// last timer interrupt, and add that value to the absolute counter
+
+	unsigned int diff;
+
+	if (last_enc_count == 0)
+	{
+		// if the current count is greater than half the total count, assume we
+		// moved backward from 0
+		if (current_enc_count >= (enc_counts / 2))
+		{
+			diff = enc_counts - current_enc_count;
+		}
+
+		// else, assume we moved forwards from 0
+		else
+		{
+			diff = current_enc_count;
+		}
+	}
+
+	// moved forwards normally or backwards through index
+	else if (current_enc_count >= last_enc_count)
+	{
+
+		if ((current_enc_count - last_enc_count) > (enc_counts / 2))
+		{
+			// assume moved backward through index
+			diff = last_enc_count + enc_counts - current_enc_count;
+		}
+
+		else
+		{
+			diff = current_enc_count - last_enc_count;
+		}
+	}
+
+	// moving backwards normally or moved forwards through index?
+	else
+	{
+
+		if ((last_enc_count - current_enc_count) > (enc_counts / 2))
+		{
+			// assume moved through index
+			diff = current_enc_count + enc_counts - last_enc_count;
+		}
+
+		else
+		{
+			diff = last_enc_count - current_enc_count;
+		}
+	}
+
+	last_enc_count = current_enc_count;
+	enc_abs_count += diff;
+}
+
 enc_abs_count_t encoder_abs_count(void)
 {
-	// // find the difference between the encoder count now and the encoder count at the last timer interrupt,
-	// // and add that value to the absolute counter
-
-	// int diff;
-
-	// // either moving forward + overflow,
-	// // or moving backward + underflow
-	// unsigned int hw_cnt = HW_ENC_TIM->CNT;
-	// if (enc_cnt_wrap_flag)
-	// {
-	// 	// overflow
-	// 	// 
-	// 	if (hw_cnt < last_enc_count)
-	// 	{
-	// 		diff = ((int)hw_cnt - (int)last_enc_count) % enc_counts;
-	// 	}
-
-	// 	// underflow, moving backwards
-	// 	else
-	// 	{
-	// 		diff = ((int)last_enc_count - (int)hw_cnt) % enc_counts;
-	// 	}
-	// }
-
-	// // no underflow or overflow
-	// else
-	// {
-	// 	// moving forwards
-	// 	if (hw_cnt > last_enc_count)
-	// 	{
-	// 		diff = hw_cnt - last_enc_count;
-	// 	}
-
-	// 	// moving backwards
-	// 	else
-	// 	{
-	// 		diff = last_enc_count - hw_cnt;
-	// 	}
-
-	// 	// diff = 0;
-	// }
-
-	// enc_cnt_wrap_flag = false;
-	// last_enc_count = HW_ENC_TIM->CNT;
-	// enc_abs_count += diff;
-	return enc_abs_count;
+	// add_encoder_ticks(HW_ENC_TIM->CNT);
+	return (enc_abs_count_t)enc_abs_count;
 }
 
 /**
@@ -303,9 +322,9 @@ void encoder_reset(void) {
 		if (index_found) {
 			// Some plausibility filtering.
 			if (cnt > (enc_counts - lim) || cnt < lim) {
-
-				enc_cnt_wrap_flag = true;
-				// HW_ENC_TIM->CNT = 0;
+				add_encoder_ticks(cnt);
+				last_enc_count = 0;
+				HW_ENC_TIM->CNT = 0;
 				bad_pulses = 0;
 			} else {
 				bad_pulses++;
@@ -315,8 +334,9 @@ void encoder_reset(void) {
 				}
 			}
 		} else {
-			enc_cnt_wrap_flag = true;
+			add_encoder_ticks(cnt);
 			HW_ENC_TIM->CNT = 0;
+			last_enc_count = 0;
 			index_found = true;
 			bad_pulses = 0;
 		}
@@ -349,6 +369,11 @@ void encoder_set_counts(uint32_t counts) {
 		TIM_SetAutoreload(HW_ENC_TIM, enc_counts - 1);
 		index_found = false;
 	}
+}
+
+uint32_t encoder_counts(void)
+{
+	return enc_counts;
 }
 
 /**
