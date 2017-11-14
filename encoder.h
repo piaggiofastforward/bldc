@@ -31,6 +31,8 @@ float encoder_read_deg(void);
 void encoder_reset(void);
 void encoder_tim_isr(void);
 void encoder_set_counts(uint32_t counts);
+
+uint32_t encoder_counts(void);
 bool encoder_index_found(void);
  
 /**
