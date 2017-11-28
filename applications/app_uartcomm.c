@@ -516,10 +516,10 @@ static THD_FUNCTION(packet_process_thread, arg)
   chVTObjectInit(&start_pub_task_vt);
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
-  chVTObjectInit(&get_encoder_ticks_task);
+  // chVTObjectInit(&get_encoder_ticks_task);
   chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
   chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
-  chVTSet(&get_encoder_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
+  // chVTSet(&get_encoder_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
 
 	while (1)
 	{
@@ -732,7 +732,7 @@ void updateFeedback(void)
   fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
   // fb.feedback.measured_position = mc_interface_get_pid_pos_now();
-  fb.feedback.measured_position = encoder_abs_ticks;
+  fb.feedback.measured_position = encoder_abs_count();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
   fb.feedback.switch_flags      = (estop << 2) | (rev_limit << 1) | (fwd_limit); 
