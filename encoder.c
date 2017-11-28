@@ -51,12 +51,12 @@
 #define SPI_SW_CS_PIN				0
 #endif
 #else
-#define SPI_SW_MISO_GPIO			HW_HALL_ENC_GPIO2
-#define SPI_SW_MISO_PIN				HW_HALL_ENC_PIN2
-#define SPI_SW_SCK_GPIO				HW_HALL_ENC_GPIO1
-#define SPI_SW_SCK_PIN				HW_HALL_ENC_PIN1
-#define SPI_SW_CS_GPIO				HW_HALL_ENC_GPIO3
-#define SPI_SW_CS_PIN				HW_HALL_ENC_PIN3
+#define SPI_SW_MISO_GPIO			HW_ENC_GPIO2
+#define SPI_SW_MISO_PIN				HW_ENC_PIN2
+#define SPI_SW_SCK_GPIO				HW_ENC_GPIO1
+#define SPI_SW_SCK_PIN				HW_ENC_PIN1
+#define SPI_SW_CS_GPIO				HW_ENC_GPIO3
+#define SPI_SW_CS_PIN				  HW_ENC_PIN3
 #endif
 
 // Private types
@@ -91,8 +91,8 @@ void encoder_deinit(void) {
 	palSetPadMode(SPI_SW_SCK_GPIO, SPI_SW_SCK_PIN, PAL_MODE_INPUT_PULLUP);
 	palSetPadMode(SPI_SW_CS_GPIO, SPI_SW_CS_PIN, PAL_MODE_INPUT_PULLUP);
 
-	palSetPadMode(HW_HALL_ENC_GPIO1, HW_HALL_ENC_PIN1, PAL_MODE_INPUT_PULLUP);
-	palSetPadMode(HW_HALL_ENC_GPIO2, HW_HALL_ENC_PIN2, PAL_MODE_INPUT_PULLUP);
+	palSetPadMode(HW_ENC_GPIO1, HW_ENC_PIN1, PAL_MODE_INPUT_PULLUP);
+	palSetPadMode(HW_ENC_GPIO2, HW_ENC_PIN2, PAL_MODE_INPUT_PULLUP);
 
 	index_found = false;
 	mode = ENCODER_MODE_NONE;
@@ -107,9 +107,9 @@ void encoder_init_abi(uint32_t counts) {
 	enc_counts = counts;
 	enc_abs_count = 0;
 
-	palSetPadMode(HW_HALL_ENC_GPIO1, HW_HALL_ENC_PIN1, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
-	palSetPadMode(HW_HALL_ENC_GPIO2, HW_HALL_ENC_PIN2, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
-//	palSetPadMode(HW_HALL_ENC_GPIO3, HW_HALL_ENC_PIN3, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
+	palSetPadMode(HW_ENC_GPIO1, HW_ENC_PIN1, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
+	palSetPadMode(HW_ENC_GPIO2, HW_ENC_PIN2, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
+	palSetPadMode(HW_ENC_GPIO3, HW_ENC_PIN3, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
 
 	// Enable timer clock
 	HW_ENC_TIM_CLK_EN();
@@ -190,33 +190,9 @@ float encoder_read_deg(void) {
 	static float angle = 0.0;
 
 	const unsigned int hw_cnt = HW_ENC_TIM->CNT;
-	// const unsigned int lim = enc_counts / 100;
-	// unsigned int diff;
 	switch (mode) {
 	case ENCODER_MODE_ABI:
 
-		// if (hw_cnt > last_enc_count)
-		// {
-		// 	// moving forwards
-		// 	if (hw_cnt - last_enc_count < lim)
-		// 		diff = hw_cnt - last_enc_count;
-		// 	// moving backwards -> underflow
-		// 	else
-		// 		diff = ((int)last_enc_count - (int)hw_cnt) % enc_counts;
-
-		// }
-		// else
-		// {
-		// 	// moving backwards
-		// 	if (last_enc_count - hw_cnt < lim)
-		// 		diff = last_enc_count - hw_cnt;
-
-		// 	// moving forwards -> overflow
-		// 	else
-		// 		diff = ((int)hw_cnt - (int)last_enc_count) % enc_counts;
-		// }
-		// enc_abs_count += diff;
-		// last_enc_count = hw_cnt;
 		add_encoder_ticks(hw_cnt);
 		angle = ((float)hw_cnt * 360.0) / (float)enc_counts;
 		break;
@@ -314,7 +290,7 @@ void encoder_reset(void) {
 	__NOP();
 	__NOP();
 	__NOP();
-	if (palReadPad(HW_HALL_ENC_GPIO3, HW_HALL_ENC_PIN3)) {
+	if (palReadPad(HW_ENC_GPIO3, HW_ENC_PIN3)) {
 		const unsigned int cnt = HW_ENC_TIM->CNT;
 		static int bad_pulses = 0;
 		const unsigned int lim = enc_counts / 20;
