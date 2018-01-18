@@ -220,7 +220,7 @@ static void add_encoder_ticks(const unsigned int current_enc_count)
 	// find the difference between the encoder count now and the encoder count at the 
 	// last timer interrupt, and add that value to the absolute counter
 
-	unsigned int diff;
+	int diff;
 
 	if (last_enc_count == 0)
 	{
@@ -228,7 +228,7 @@ static void add_encoder_ticks(const unsigned int current_enc_count)
 		// moved backward from 0
 		if (current_enc_count >= (enc_counts / 2))
 		{
-			diff = enc_counts - current_enc_count;
+			diff = -1.0 * (enc_counts - current_enc_count);
 		}
 
 		// else, assume we moved forwards from 0
@@ -245,7 +245,7 @@ static void add_encoder_ticks(const unsigned int current_enc_count)
 		if ((current_enc_count - last_enc_count) > (enc_counts / 2))
 		{
 			// assume moved backward through index
-			diff = last_enc_count + enc_counts - current_enc_count;
+			diff = -1.0 * (last_enc_count + enc_counts - current_enc_count);
 		}
 
 		else
@@ -266,7 +266,7 @@ static void add_encoder_ticks(const unsigned int current_enc_count)
 
 		else
 		{
-			diff = last_enc_count - current_enc_count;
+			diff = -1.0 * (last_enc_count - current_enc_count);
 		}
 	}
 
