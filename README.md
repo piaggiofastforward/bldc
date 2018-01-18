@@ -10,3 +10,8 @@ Our vesc interface is done over `UART`, and all communication functionality can 
 - Command speed is dictated by the Linux/embedded driver, but has been verified to function properly up to ~200Hz.
 
 Support for linear motor is in the code, but untested over `UART`.
+
+
+## Motor Controller Configuration and Hall Table Calibration ##
+
+Both of these tasks are handled through the linux driver located in `pff-ros-ws` on the branch `feature/vesc_ros_driver`
