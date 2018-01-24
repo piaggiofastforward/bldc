@@ -129,6 +129,7 @@ static virtual_timer_t status_task_vt;
 static virtual_timer_t hall_task_vt;
 #define HALL_READ_RATE_MS 10
 #define HALL_PACKET_HEADER 47
+#define HALL_PACKET_FOOTER 48
 static uint8_t hall_data[3] = {};
 static bool shouldSendHallData = false;
 
@@ -692,13 +693,14 @@ static void hallReadCb(void* _)
 
 void sendHallData()
 {
-  uint8_t data[4] = {
+  uint8_t data[5] = {
     HALL_PACKET_HEADER,
     hall_data[0],
     hall_data[1],
     hall_data[2],
+    HALL_PACKET_FOOTER,
   };
-  send_packet_wrapper(data, 4);
+  send_packet_wrapper(data, 5);
 }
 
 /**

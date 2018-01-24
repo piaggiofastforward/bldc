@@ -9,19 +9,32 @@ from std_msgs.msg import UInt8
 
 BAUD = 115200
 TIMEOUT = 0.5  # seconds
+
+'''
+since we aren't using the packet interface that the VESC firmware provides
+(cause its in C and python is much better for rapid development),
+use these packet headers and footers on the VESC side.
+
+This won't conflict with any other values since the hall data sent from the
+VESC will either be a 0 or a 1
+'''
+
 PACKET_HEADER = 47
-PACKET_FOOTER = '\n'
+PACKET_FOOTER = 48
 PACKET_SIZE = 5
+
+NUM_HALLS = 3
 
 class DataHandler():
 
     def __init__(self):
         rospy.init_node('hall_listener')
-        self.pubs = [
-            rospy.Publisher('/hall_1', UInt8, queue_size = 0),
-            rospy.Publisher('/hall_2', UInt8, queue_size = 0),
-            rospy.Publisher('/hall_3', UInt8, queue_size = 0)
-        ]
+        self.pubs = []
+        get_topic = lambda num: '/hall_' + str(num + 1)
+        for i in range(NUM_HALLS):
+            self.pubs.append(
+                rospy.Publisher(get_topic(i), UInt8, queue_size = 0)
+            )
 
     # the PACKET_HEADER must be contained within the message so that we
     # know which data point corresponds to which hall sensor
