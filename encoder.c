@@ -191,6 +191,9 @@ float encoder_read_deg(void) {
 
 	const unsigned int hw_cnt = HW_ENC_TIM->CNT;
 	switch (mode) {
+
+	// ABI encoder use is configured to report total encoder counts as opposed to a count
+	// that resets to 0 after passing the encoder index.
 	case ENCODER_MODE_ABI:
 
 		add_encoder_ticks(hw_cnt);

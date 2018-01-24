@@ -36,7 +36,6 @@
 #include "mc_interface.h"  // motor control functions
 #include "timeout.h"       // timeout_reset()
 // #include "ext_lld.h"
-#include "mcpwm_foc.h"
 #include "uart_mc_config.h"
 #include "encoder.h"
 

@@ -1231,6 +1231,7 @@ static void run_pid_control_pos(float dt) {
 		return;
 	}
 
+
 	// Compute error
 	float error = utils_angle_difference(encoder_read_deg(), pos_pid_set_pos);
 
@@ -1880,6 +1881,8 @@ void mcpwm_adc_int_handler(void *p, uint32_t flags) {
 
 			pwm_cycles_sum += conf->m_bldc_f_sw_max / switching_frequency_now;
 			pwm_cycles++;
+
+		// Not sensorless!!!!
 		} else {
 			const int hall_phase = mcpwm_read_hall_phase();
 			if (comm_step != hall_phase) {
@@ -1896,6 +1899,8 @@ void mcpwm_adc_int_handler(void *p, uint32_t flags) {
 				commutate(0);
 			}
 		}
+
+	// not in BLDC mode!!!!
 	} else {
 		float amp = 0.0;
 
