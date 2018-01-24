@@ -122,8 +122,20 @@ static virtual_timer_t feedback_task_vt;
 static virtual_timer_t status_task_vt;
 #define isPublishing() (chVTIsArmedI(&feedback_task_vt) || chVTIsArmedI(&status_task_vt))
 
+/**
+ *  This timer will be used to trigger a task that reads the hall sensors and sends the data
+ *  over UART.
+ */
+static virtual_timer_t hall_task_vt;
+#define HALL_READ_RATE_MS 10
+#define HALL_PACKET_HEADER 47
+static uint8_t hall_data[3] = {};
+static bool shouldSendHallData = false;
+
+static void hallReadCb(void* _);
 static void feedbackTaskCb(void* _);
 static void statusTaskCb(void* _);
+void sendHallData(void);
 void sendFeedback(void);
 void updateFeedback(void);
 void sendStatus(void);
@@ -512,12 +524,14 @@ static THD_FUNCTION(packet_process_thread, arg)
    * shouldSendStatus, and shouldReadEncTicks flags in an interrupt context, and we will do the actual
    * operation in the main thread.
    */
-  chVTObjectInit(&start_pub_task_vt);
-  chVTObjectInit(&status_task_vt);
-  chVTObjectInit(&feedback_task_vt);
+  // chVTObjectInit(&start_pub_task_vt);
+  // chVTObjectInit(&status_task_vt);
+  // chVTObjectInit(&feedback_task_vt);
   // chVTObjectInit(&get_encoder_ticks_task);
-  chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
-  chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
+  chVTObjectInit(&hall_task_vt);
+  chVTSet(&hall_task_vt, MS2ST(HALL_READ_RATE_MS), hallReadCb, NULL);
+  // chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  // chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
   // chVTSet(&get_encoder_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
 
 	while (1)
@@ -570,6 +584,12 @@ static THD_FUNCTION(packet_process_thread, arg)
       }
       rxEndReceived = false;
       uartReceiving = false;
+    }
+
+    if (shouldSendHallData)
+    {
+      sendHallData();
+      shouldSendHallData = false;
     }
 
     /**
@@ -653,6 +673,32 @@ void confirmationEcho()
 {
   uint8_t confirmationBuf[3] = {0, 0, 0};
   send_packet_wrapper(confirmationBuf, 3);
+}
+
+static void hallReadCb(void* _)
+{
+  (void)_;
+  chSysLockFromISR();
+
+  hall_data[0] = READ_HALL1();
+  hall_data[1] = READ_HALL2();
+  hall_data[2] = READ_HALL3();
+
+  chVTSetI(&hall_task_vt, MS2ST(HALL_READ_RATE_MS), hallReadCb, NULL);
+  shouldSendHallData = true;
+  chEvtSignalI(process_tp, (eventmask_t) 1);
+  chSysUnlockFromISR();
+}
+
+void sendHallData()
+{
+  uint8_t data[4] = {
+    HALL_PACKET_HEADER,
+    hall_data[0],
+    hall_data[1],
+    hall_data[2],
+  };
+  send_packet_wrapper(data, 4);
 }
 
 /**
