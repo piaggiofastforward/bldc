@@ -4,6 +4,7 @@ import rospy
 import serial
 import argparse
 import traceback
+import time
 from std_msgs.msg import UInt8
 
 BAUD = 115200
@@ -32,7 +33,7 @@ class DataHandler():
         start = new_data.index(PACKET_HEADER)
         for sensor_num in [0,1,2]:
             val = UInt8(new_data[sensor_num + start + 1])
-            self.pubs[sensor_num].Publish(val)
+            self.pubs[sensor_num].publish(val)
 
 
 def listen(port):
@@ -47,11 +48,12 @@ def listen(port):
 
     # continually loop and read the values being sent to us over UART. Publish them to 
     bytesToRead = ser.inWaiting()
-    while(1):
+    while not rospy.is_shutdown():
         while bytesToRead < PACKET_SIZE:
             bytesToRead = ser.inWaiting()
         data = ser.read_until(PACKET_FOOTER, bytesToRead)
         data_handler.publish_all(data)
+        time.sleep(0.005)
 
 
 
@@ -59,4 +61,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=str, default='/dev/ttyUSB0')
     args = parser.parse_args()
-    listen(args.port)
+
+    try:
+        listen(args.port)
+    except rospy.ROSInterruptException:
+        print 'exiting'
