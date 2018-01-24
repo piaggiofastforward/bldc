@@ -36,16 +36,22 @@ class DataHandler():
                 rospy.Publisher(get_topic(i), UInt8, queue_size = 0)
             )
 
-    # the PACKET_HEADER must be contained within the message so that we
+    # the PACKET_HEADER must be contained within the message so that while
     # know which data point corresponds to which hall sensor
     def publish_all(self, new_data):
-        if PACKET_HEADER not in new_data:
-            print 'packet header not found in the data'
+
+        display_str = ''
+        for x in new_data:
+            display_str = display_str + int(x) + ', '
+        print display_str
+
+        if PACKET_HEADER not in new_data and PACKET_FOOTER not in new_data:
+            print 'packet header and footer not found in the data'
             return -1
 
-        start = new_data.index(PACKET_HEADER)
+        end = new_data.index(PACKET_FOOTER)
         for sensor_num in [0,1,2]:
-            val = UInt8(new_data[sensor_num + start + 1])
+            val = UInt8(new_data[end - NUM_HALLS + sensor_num])
             self.pubs[sensor_num].publish(val)
 
 
@@ -53,20 +59,15 @@ def listen(port):
     data_handler = DataHandler()
     ser = serial.Serial(args.port, BAUD, timeout=TIMEOUT)
 
-    try:
-        ser.open()
-    except serial.SerialException:
-        traceback.print_exc()
-        return
-
     # continually loop and read the values being sent to us over UART. Publish them to 
     bytesToRead = ser.inWaiting()
     while not rospy.is_shutdown():
-        while bytesToRead < PACKET_SIZE:
+        while bytesToRead < PACKET_SIZE:        
             bytesToRead = ser.inWaiting()
-        data = ser.read_until(PACKET_FOOTER, bytesToRead)
-        data_handler.publish_all(data)
-        time.sleep(0.005)
+        data = ser.read_until(b'\x30')
+
+        #use ord() to convert the bytes to integers
+        data_handler.publish_all([ord(d) for d in data])
 
 
 
