@@ -556,35 +556,35 @@ static THD_FUNCTION(packet_process_thread, arg)
      *  of the bytes received through uartStartReceive(). 
      */
 
-    while (!uartReceiving && (serial_rx_read_pos != serial_rx_write_pos))
-    {
+    // while (!uartReceiving && (serial_rx_read_pos != serial_rx_write_pos))
+    // {
 
-      /**
-       * This should be called on every received byte. When the packet interface detects the end of
-       * a packet, it will call its process_func - in our case, this will be process_packet() above. 
-       */
-      packet_process_byte(serial_rx_buffer[serial_rx_read_pos++], PACKET_HANDLER);
+    //   /**
+    //    * This should be called on every received byte. When the packet interface detects the end of
+    //    * a packet, it will call its process_func - in our case, this will be process_packet() above. 
+    //    */
+    //   packet_process_byte(serial_rx_buffer[serial_rx_read_pos++], PACKET_HANDLER);
 
-      if (serial_rx_read_pos == SERIAL_RX_BUFFER_SIZE) {
-        serial_rx_read_pos = 0;
-      }
-    }
+    //   if (serial_rx_read_pos == SERIAL_RX_BUFFER_SIZE) {
+    //     serial_rx_read_pos = 0;
+    //   }
+    // }
 
-    /**
-     * Handle the case where the uartStartReceive function returned (ie: the MAX_BYTES_PER_READ)
-     * was met) make sure we first process the bytes received from rxChar() (while statement above)
-     * and then process all of these bytes so that we call packet_process_byte() in the correct sequence.
-     */
+    // *
+    //  * Handle the case where the uartStartReceive function returned (ie: the MAX_BYTES_PER_READ)
+    //  * was met) make sure we first process the bytes received from rxChar() (while statement above)
+    //  * and then process all of these bytes so that we call packet_process_byte() in the correct sequence.
+     
 
-    if (rxEndReceived)
-    {
-      for (int i = 0; i < packetLength; i++)
-      {
-        packet_process_byte(uart_receive_buffer[i], PACKET_HANDLER);
-      }
-      rxEndReceived = false;
-      uartReceiving = false;
-    }
+    // if (rxEndReceived)
+    // {
+    //   for (int i = 0; i < packetLength; i++)
+    //   {
+    //     packet_process_byte(uart_receive_buffer[i], PACKET_HANDLER);
+    //   }
+    //   rxEndReceived = false;
+    //   uartReceiving = false;
+    // }
 
     if (shouldSendHallData)
     {
@@ -592,60 +592,60 @@ static THD_FUNCTION(packet_process_thread, arg)
       shouldSendHallData = false;
     }
 
-    /**
-     * If we received the packetLength, use uartStartReceive() to receive the rest of the bytes. When
-     * the specified number of bytes is read, rxEnd() will be invoked, setting rxEndReceived = true
-     */
-    if (packetLengthReceived)
-    {
-      uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
-      uartReceiving = true;
-      packetLengthReceived = false;
-    }
+  //   /**
+  //    * If we received the packetLength, use uartStartReceive() to receive the rest of the bytes. When
+  //    * the specified number of bytes is read, rxEnd() will be invoked, setting rxEndReceived = true
+  //    */
+  //   if (packetLengthReceived)
+  //   {
+  //     uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
+  //     uartReceiving = true;
+  //     packetLengthReceived = false;
+  //   }
 
-    /**
-     * These flags will be set in timer interrupts at rates configurable via FB_RATE_MS and STATUS_RATE_MS
-     */
-		if (shouldSendFeedback)
-    {
-      sendFeedback();
-      shouldSendFeedback = false;
-    }
-    if (shouldSendStatus)
-    {
-      sendStatus();
-      shouldSendStatus = false;
-    }
+  //   /**
+  //    * These flags will be set in timer interrupts at rates configurable via FB_RATE_MS and STATUS_RATE_MS
+  //    */
+		// if (shouldSendFeedback)
+  //   {
+  //     sendFeedback();
+  //     shouldSendFeedback = false;
+  //   }
+  //   if (shouldSendStatus)
+  //   {
+  //     sendStatus();
+  //     shouldSendStatus = false;
+  //   }
 
-    /**
-     * TODO: proper handling of estop (brake? or just set command to 0?)
-     */
-		if (estop)
-		{
-      mcpwm_foc_stop_pwm();
-			// mc_interface_set_brake_current(0);
-		}
-		else if (!shouldMove())
-		{
-			// mc_interface_brake_now();
-		}
+  //   /**
+  //    * TODO: proper handling of estop (brake? or just set command to 0?)
+  //    */
+		// if (estop)
+		// {
+  //     mcpwm_foc_stop_pwm();
+		// 	// mc_interface_set_brake_current(0);
+		// }
+		// else if (!shouldMove())
+		// {
+		// 	// mc_interface_brake_now();
+		// }
 
-    else if (commandReceived)
-		{
-			setCommand();
-			commandReceived = false;
-		}
+  //   else if (commandReceived)
+		// {
+		// 	setCommand();
+		// 	commandReceived = false;
+		// }
 
-    if (commitConfigReceived)
-    {
-      disablePublishing();
-      conf_general_store_mc_configuration((mc_configuration *) &mcconf);
-      mc_interface_set_configuration((mc_configuration *) &mcconf);
-      chThdSleepMilliseconds(500);
-      sendConfigCommitConfirmation();
-      commitConfigReceived = false;
-      enablePublishing();
-    }
+  //   if (commitConfigReceived)
+  //   {
+  //     disablePublishing();
+  //     conf_general_store_mc_configuration((mc_configuration *) &mcconf);
+  //     mc_interface_set_configuration((mc_configuration *) &mcconf);
+  //     chThdSleepMilliseconds(500);
+  //     sendConfigCommitConfirmation();
+  //     commitConfigReceived = false;
+  //     enablePublishing();
+  //   }
 	}
 }
 
