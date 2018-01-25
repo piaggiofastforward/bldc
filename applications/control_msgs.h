@@ -2,6 +2,7 @@
 #define __I2C_MSGS_H__
 #include <stdint.h>
 #include <stdbool.h>
+#include "encoder.h"
 
 #ifdef PLATFORM_IS_LINUX
   #define ENUM_SIZE : uint8_t
@@ -27,7 +28,7 @@ enum mc_packet_type ENUM_SIZE {
   CONTROL_WRITE,
   CONFIG_WRITE,
   CONFIG_WRITE_HALL,        // only for HALL_TABLE and HALL_TABLE_FOC
-  COMMIT_MC_CONFIG,         // use after many CONFIG_WRITE*s in order to actually effect the changes
+  COMMIT_MC_CONFIG,        // use after many CONFIG_WRITE*s in order to actually effect the changes
   REQUEST_DETECT_HALL_FOC,  // use to perform FOC hall table calibration routine
   RESPONSE_DETECT_HALL_FOC, // use for response containing foc hall table data
 };
@@ -223,7 +224,7 @@ typedef struct {
   float motor_current;
   int32_t commanded_value;
   int32_t measured_velocity;
-  int32_t measured_position;
+  enc_abs_count_t measured_position;
   float supply_voltage;
   float supply_current;
   uint32_t switch_flags;

@@ -31,6 +31,14 @@ float encoder_read_deg(void);
 void encoder_reset(void);
 void encoder_tim_isr(void);
 void encoder_set_counts(uint32_t counts);
+
+uint32_t encoder_counts(void);
 bool encoder_index_found(void);
+ 
+/**
+ *  Keep track of absolute encoder ticks since we probably want to use that instead of rotor angle.
+ */
+typedef uint32_t enc_abs_count_t;
+enc_abs_count_t encoder_abs_count(void);
 
 #endif /* ENCODER_H_ */

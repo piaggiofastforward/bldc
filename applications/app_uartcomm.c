@@ -30,14 +30,14 @@
 #include "app.h"
 #include "ch.h"
 #include "hal.h"
+#include "conf_general.h"
 #include "hw.h"
 #include "packet.h"
 #include "control_msgs.h"
 #include "mc_interface.h"  // motor control functions
 #include "timeout.h"       // timeout_reset()
-#include "ext_lld.h"
-#include "mcpwm_foc.h"
 #include "uart_mc_config.h"
+#include "encoder.h"
 
 // Settings
 #define BAUDRATE					115200
@@ -109,9 +109,9 @@ volatile float *getParamPtr(enum mc_config_param param);
 int32_t descale_position(float pos);
 bool shouldMove(void);
 void homing_sequence(void);
-void toggle_estop(EXTDriver *extp, expchannel_t channel); 
-void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel);
-void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
+// void toggle_estop(EXTDriver *extp, expchannel_t channel); 
+// void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel);
+// void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
 
 
 /**
@@ -129,6 +129,12 @@ void updateFeedback(void);
 void sendStatus(void);
 void updateStatus(void);
 
+/**
+ *  In response to an interrupt from the estop pin, wait to account for button debounce,
+ *  then read the pin.
+ */
+#define ESTOP_DEBOUNCE_MS 15  // PLENTY
+static void read_estop_wait();
 /**
  *  Enable/disable the virtual timer interrupts that prompt us to send feedback/status data. This 
  *  will be used when we get an FOC detection request.
@@ -156,6 +162,14 @@ static void startPubTaskCb(void* _);
 volatile bool shouldSendStatus   = false;
 volatile bool shouldSendFeedback = false;
 
+/**
+ *  Define a timer task to get the absolute encoder ticks at a predefined rate
+ */
+#define GET_ENC_TICKS_RATE_MS 5
+static virtual_timer_t get_encoder_ticks_task;
+static volatile enc_abs_count_t encoder_abs_ticks = 0;
+static volatile bool shouldReadEncTicks = false;
+static void getTicksCb(void* _);
 
 /**
  * State variables for coordinating cahracters received through rxChar() and through uartStartReceive(),
@@ -170,6 +184,9 @@ static volatile bool packetLengthReceived = false;
 // set this to true after calling uartStartReceive(), set back to false in rxEnd()
 static volatile bool uartReceiving = false;
 
+// this will be set through ext_handler in response to an interrupt on the estop pin
+static volatile bool shouldReadEstop = false;
+
 /**
  * For testing purposes!
  */
@@ -180,48 +197,20 @@ void confirmationEcho(void);
  * Each pin can have at most one interrupt across GPIO sets.
  * Each index maps to a pin.
  *
- * ESTOP     -> PC0 (pin 8)
+ * ESTOP     -> PC5 (pin 8)
  * FWD_LIMIT -> PA5 (pin 21)
  * REV_LIMIT -> PA6 (pin 22)
  *
  * Pass the GPIO base (eg. GPIO_A) as the first argument to underlying EXTChannelConfig
  * struct, and the index in this EXTConfig instance represents the pin index.
  */
-#define ESTOP_PIN_INDEX  0
-#define FWDLIM_PIN_INDEX 4
-#define REVLIM_PIN_INDEX 5
-#define ESTOP_PORT       GPIOC
+
+// limit switches are probably going to be removed, and estop pin definitions have moved to hw60.h
+// #define ESTOP_PIN_INDEX  5
+#define FWDLIM_PIN_INDEX 3
+#define REVLIM_PIN_INDEX 4
 #define FWDLIM_PORT      GPIOA
 #define REVLIM_PORT      GPIOA
-
-static const EXTConfig extcfg = {
-  {
-    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_estop},
-    {EXT_CH_MODE_DISABLED, NULL},    
-    {EXT_CH_MODE_DISABLED, NULL},    
-    {EXT_CH_MODE_DISABLED, NULL},   
-    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_fwd_limit},
-    {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},
-    {EXT_CH_MODE_DISABLED, NULL},   
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL},
-    {EXT_CH_MODE_DISABLED, NULL}
-  }
-};
-
 
 /*
  * This callback is invoked when a transmission buffer has been completely
@@ -439,17 +428,18 @@ static void initHardware()
       PAL_STM32_OSPEED_HIGHEST |
       PAL_STM32_PUDR_PULLUP);
 
-  palClearPad(ESTOP_PORT, ESTOP_PIN_INDEX);
+  palClearPad(HW_ESTOP_PORT, HW_ESTOP_PIN);
   palClearPad(FWDLIM_PORT, FWDLIM_PIN_INDEX);
   palClearPad(REVLIM_PORT, REVLIM_PIN_INDEX);
-  palSetPadMode(ESTOP_PORT, ESTOP_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
+  palSetPadMode(HW_ESTOP_PORT, HW_ESTOP_PIN, PAL_MODE_INPUT_PULLUP);
   palSetPadMode(FWDLIM_PORT, FWDLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
   palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
 
-  extStart(&EXTD1, &extcfg);
-  estop     = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX)   == PAL_LOW;
+  estop     = READ_ESTOP();
   rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
   fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
+  configureEXT();
+  set_estop_callback(app_handle_estop_interrupt);
 }
 
 void app_uartcomm_start(void)
@@ -500,19 +490,27 @@ static THD_FUNCTION(packet_process_thread, arg)
 	process_tp = chThdGetSelfX();
 
   /**
-   * Initialize timers for feedback and status reports. These timers will set the shouldSendFeedback 
-   * and shouldSendStatus flags in an interrupt context, and we will do the actual data transmission
-   * in the main thread.
+   * Initialize timers for feedback and status reports. These timers will set the shouldSendFeedback,
+   * shouldSendStatus, and shouldReadEncTicks flags in an interrupt context, and we will do the actual
+   * operation in the main thread.
    */
   chVTObjectInit(&start_pub_task_vt);
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
+  // chVTObjectInit(&get_encoder_ticks_task);
   chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
   chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
+  // chVTSet(&get_encoder_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
 
 	while (1)
 	{
 		chEvtWaitAny((eventmask_t) 1);
+
+    if (shouldReadEstop)
+    {
+      read_estop_wait();
+      shouldReadEstop = false;
+    }
 
     /**
      * We can receive data in 2 ways:
@@ -587,20 +585,18 @@ static THD_FUNCTION(packet_process_thread, arg)
       shouldSendStatus = false;
     }
 
+    
     /**
-     * TODO: proper handling of estop (brake? or just set command to 0?)
+     *  This can probably be removed since we wont be using optical encoders with limit switches, we will be
+     * transitioning to an absolute magnetic position sensor
      */
-		if (estop)
-		{
-      mcpwm_foc_stop_pwm();
-			// mc_interface_set_brake_current(0);
-		}
-		else if (!shouldMove())
-		{
-			// mc_interface_brake_now();
-		}
+		// else if (!shouldMove())
+		// {
+		// 	// mc_interface_brake_now();
+		// }
 
-    else if (commandReceived)
+    // don't give commands unless the estop is not pressed down
+    if (commandReceived && !estop)
 		{
 			setCommand();
 			commandReceived = false;
@@ -702,6 +698,17 @@ static void statusTaskCb(void* _)
   chSysUnlockFromISR();
 }
 
+static void getTicksCb(void* _)
+{
+	(void) _;
+	shouldReadEncTicks = true;
+	chSysLockFromISR();
+	encoder_abs_ticks = encoder_abs_count();
+  chVTSetI(&get_encoder_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
+  chEvtSignalI(process_tp, (eventmask_t) 1);
+  chSysUnlockFromISR();
+}
+
 /*
  * Updates the feedback struct with current data
  */ 
@@ -709,10 +716,11 @@ void updateFeedback(void)
 {
   fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
-  fb.feedback.measured_position = mc_interface_get_pid_pos_now();
+  // fb.feedback.measured_position = mc_interface_get_pid_pos_now();
+  fb.feedback.measured_position = encoder_abs_count();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
-  fb.feedback.switch_flags      = (estop << 2) | (rev_limit << 1) | (fwd_limit); 
+  fb.feedback.switch_flags      = estop;
 }
 
 /**
@@ -749,7 +757,10 @@ void setCommand()
     case SPEED:
       fb.feedback.commanded_value = currentCommand.target_cmd_i;
       echoCommand();
-      // mc_interface_set_pid_speed(currentCommand.target_cmd_f);
+
+      // cast this to a float, which is ABSOLUTELY NOT the same as substituting
+      // currentCommand.target_cmd_f........
+      mc_interface_set_pid_speed((float)currentCommand.target_cmd_i);
       break;
     // case CURRENT:
     //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000; 
@@ -826,6 +837,18 @@ static void detectHallTableFoc(void)
   }
 }
 
+void app_handle_estop_interrupt(void)
+{
+  shouldReadEstop = true;
+  chEvtSignalI(process_tp, (eventmask_t) 1);
+}
+
+static void read_estop_wait()
+{
+  chThdSleepMilliseconds(ESTOP_DEBOUNCE_MS);
+  estop = READ_ESTOP();
+}
+
 /*
  * Returns the absolute position in ticks based on the min and max limits
  * pos should be between -1 and 1
@@ -888,56 +911,56 @@ bool shouldMove(void)
   return !(isForward ? fwd_limit : rev_limit);
 }
 
-/*
- * Reads the estop value and disables control if it is set
- * Called from interrupt context on both edges
- * Pulldown input, so unless externally pulled up, default value is PAL_LOW
- */
-void toggle_estop(EXTDriver *extp, expchannel_t channel) 
-{
-  (void) extp;
-  (void) channel;
-  estop = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX) == PAL_LOW;
-  // if (estop) {
-  //   mc_interface_set_brake_current(0);
-  // }
-}
+// /*
+//  * Reads the estop value and disables control if it is set
+//  * Called from interrupt context on both edges
+//  * Pulldown input, so unless externally pulled up, default value is PAL_LOW
+//  */
+// void toggle_estop(EXTDriver *extp, expchannel_t channel) 
+// {
+//   (void) extp;
+//   (void) channel;
+//   estop = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX) == PAL_LOW;
+//   // if (estop) {
+//   //   mc_interface_set_brake_current(0);
+//   // }
+// }
 
-/*
- * Reads the forward limit switch. If set and trying to move forward, brake
- * Sets the max_tacho limit
- * Called from interrupt context on both edges
- */
-void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel) 
-{
-  (void) extp;
-  (void) channel;
-  fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
-  if (fwd_limit) {
-    if (!shouldMove()) {
-      // mc_interface_brake_now();
-    }
-    max_tacho = mc_interface_get_tachometer_value(false);
-  }
-}
+// /*
+//  * Reads the forward limit switch. If set and trying to move forward, brake
+//  * Sets the max_tacho limit
+//  * Called from interrupt context on both edges
+//  */
+// void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel) 
+// {
+//   (void) extp;
+//   (void) channel;
+//   fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
+//   if (fwd_limit) {
+//     if (!shouldMove()) {
+//       // mc_interface_brake_now();
+//     }
+//     max_tacho = mc_interface_get_tachometer_value(false);
+//   }
+// }
 
-/*
- * Reads the reverse limit switch. If set and trying to move backwards, brake
- * Sets the min_tacho limit
- * Called from interrupt context on both edges
- */
-void toggle_rev_limit(EXTDriver *extp, expchannel_t channel) 
-{
-  (void) extp;
-  (void) channel;
-  rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
-  if (rev_limit) {
-    if (!shouldMove()) {
-      // mc_interface_brake_now();
-    }
-    min_tacho = mc_interface_get_tachometer_value(false);
-  }
-}
+// /*
+//  * Reads the reverse limit switch. If set and trying to move backwards, brake
+//  * Sets the min_tacho limit
+//  * Called from interrupt context on both edges
+//  */
+// void toggle_rev_limit(EXTDriver *extp, expchannel_t channel) 
+// {
+//   (void) extp;
+//   (void) channel;
+//   rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
+//   if (rev_limit) {
+//     if (!shouldMove()) {
+//       // mc_interface_brake_now();
+//     }
+//     min_tacho = mc_interface_get_tachometer_value(false);
+//   }
+// }
 
 static int getStringPotValue()
 {

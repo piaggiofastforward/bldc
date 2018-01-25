@@ -154,22 +154,44 @@
 #define HW_I2C_SDA_PIN			11
 
 // Hall/encoder pins
-#define HW_HALL_ENC_GPIO1		GPIOC
-#define HW_HALL_ENC_PIN1		6
-#define HW_HALL_ENC_GPIO2		GPIOC
-#define HW_HALL_ENC_PIN2		7
-#define HW_HALL_ENC_GPIO3		GPIOC
-#define HW_HALL_ENC_PIN3		8
+#define HW_HALL_GPIO1           GPIOA
+#define HW_HALL_PIN1            5
+#define HW_HALL_GPIO2           GPIOA
+#define HW_HALL_PIN2            6
+#define HW_HALL_GPIO3           GPIOA
+#define HW_HALL_PIN3            7
+
+#define HW_ENC_GPIO1	GPIOC
+#define HW_ENC_PIN1		6
+#define HW_ENC_GPIO2	GPIOC
+#define HW_ENC_PIN2		7
+#define HW_ENC_GPIO3	GPIOB
+#define HW_ENC_PIN3		0
+
+
 #define HW_ENC_TIM				TIM3
 #define HW_ENC_TIM_AF			GPIO_AF_TIM3
 #define HW_ENC_TIM_CLK_EN()		RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE)
-#define HW_ENC_EXTI_PORTSRC		EXTI_PortSourceGPIOC
-#define HW_ENC_EXTI_PINSRC		EXTI_PinSource8
-#define HW_ENC_EXTI_CH			EXTI9_5_IRQn
-#define HW_ENC_EXTI_LINE		EXTI_Line8
-#define HW_ENC_EXTI_ISR_VEC		EXTI9_5_IRQHandler
+// #define HW_ENC_EXTI_PORTSRC		EXTI_PortSourceGPIOC
+// #define HW_ENC_EXTI_PINSRC		EXTI_PinSource8
+#define HW_ENC_EXTI_PORTSRC     EXTI_PortSourceGPIOB
+#define HW_ENC_EXTI_PINSRC      EXTI_PinSource0
+
+
+#define HW_ENC_EXTI_CH			EXTI0_IRQn
+#define HW_ENC_EXTI_LINE		EXTI_Line0
+#define HW_ENC_EXTI_ISR_VEC		EXTI0_IRQHandler
 #define HW_ENC_TIM_ISR_CH		TIM3_IRQn
 #define HW_ENC_TIM_ISR_VEC		TIM3_IRQHandler
+
+// estop definitions
+#define HW_ESTOP_PIN          5
+#define HW_ESTOP_PORT         GPIOC
+#define HW_ESTOP_EXTI_PORTSRC EXTI_PortSourceGPIOC
+#define HW_ESTOP_EXTI_PINSRC  EXTI_PinSource5
+#define HW_ESTOP_EXTI_CH      EXTI9_5_IRQn
+#define HW_ESTOP_EXTI_ISR_VEC   EXTI9_5_IRQHandler
+#define HW_ESTOP_EXTI_LINE    EXTI_Line5
 
 // NRF pins
 #define NRF_PORT_CSN			GPIOB
@@ -210,9 +232,12 @@
 #define ADC_V_ZERO				(ADC_Value[ADC_IND_VIN_SENS] / 2)
 
 // Macros
-#define READ_HALL1()			palReadPad(HW_HALL_ENC_GPIO1, HW_HALL_ENC_PIN1)
-#define READ_HALL2()			palReadPad(HW_HALL_ENC_GPIO2, HW_HALL_ENC_PIN2)
-#define READ_HALL3()			palReadPad(HW_HALL_ENC_GPIO3, HW_HALL_ENC_PIN3)
+#define READ_HALL1()			palReadPad(HW_HALL_GPIO1, HW_HALL_PIN1)
+#define READ_HALL2()			palReadPad(HW_HALL_GPIO2, HW_HALL_PIN2)
+#define READ_HALL3()			palReadPad(HW_HALL_GPIO3, HW_HALL_PIN3)
+
+// note: this assumes that the estop pin is active high
+#define READ_ESTOP() (palReadPad(HW_ESTOP_PORT, HW_ESTOP_PIN) == PAL_HIGH)
 
 // Default setting overrides
 #ifndef MCCONF_DEFAULT_MOTOR_TYPE

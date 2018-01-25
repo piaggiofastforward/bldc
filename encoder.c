@@ -18,6 +18,7 @@
     */
 
 #include "encoder.h"
+#include "stdlib.h"
 #include "ch.h"
 #include "hal.h"
 #include "stm32f4xx_conf.h"
@@ -50,12 +51,12 @@
 #define SPI_SW_CS_PIN				0
 #endif
 #else
-#define SPI_SW_MISO_GPIO			HW_HALL_ENC_GPIO2
-#define SPI_SW_MISO_PIN				HW_HALL_ENC_PIN2
-#define SPI_SW_SCK_GPIO				HW_HALL_ENC_GPIO1
-#define SPI_SW_SCK_PIN				HW_HALL_ENC_PIN1
-#define SPI_SW_CS_GPIO				HW_HALL_ENC_GPIO3
-#define SPI_SW_CS_PIN				HW_HALL_ENC_PIN3
+#define SPI_SW_MISO_GPIO			HW_ENC_GPIO2
+#define SPI_SW_MISO_PIN				HW_ENC_PIN2
+#define SPI_SW_SCK_GPIO				HW_ENC_GPIO1
+#define SPI_SW_SCK_PIN				HW_ENC_PIN1
+#define SPI_SW_CS_GPIO				HW_ENC_GPIO3
+#define SPI_SW_CS_PIN				  HW_ENC_PIN3
 #endif
 
 // Private types
@@ -70,12 +71,15 @@ static bool index_found = false;
 static uint32_t enc_counts = 10000;
 static encoder_mode mode = ENCODER_MODE_NONE;
 static float last_enc_angle = 0.0;
+static volatile enc_abs_count_t enc_abs_count = 0;
+static enc_abs_count_t last_enc_count = 0;
 
 // Private functions
 static void spi_transfer(uint16_t *in_buf, const uint16_t *out_buf, int length);
 static void spi_begin(void);
 static void spi_end(void);
 static void spi_delay(void);
+static void add_encoder_ticks(const unsigned int current_enc_count);
 
 void encoder_deinit(void) {
 	nvicDisableVector(HW_ENC_EXTI_CH);
@@ -87,8 +91,8 @@ void encoder_deinit(void) {
 	palSetPadMode(SPI_SW_SCK_GPIO, SPI_SW_SCK_PIN, PAL_MODE_INPUT_PULLUP);
 	palSetPadMode(SPI_SW_CS_GPIO, SPI_SW_CS_PIN, PAL_MODE_INPUT_PULLUP);
 
-	palSetPadMode(HW_HALL_ENC_GPIO1, HW_HALL_ENC_PIN1, PAL_MODE_INPUT_PULLUP);
-	palSetPadMode(HW_HALL_ENC_GPIO2, HW_HALL_ENC_PIN2, PAL_MODE_INPUT_PULLUP);
+	palSetPadMode(HW_ENC_GPIO1, HW_ENC_PIN1, PAL_MODE_INPUT_PULLUP);
+	palSetPadMode(HW_ENC_GPIO2, HW_ENC_PIN2, PAL_MODE_INPUT_PULLUP);
 
 	index_found = false;
 	mode = ENCODER_MODE_NONE;
@@ -101,10 +105,11 @@ void encoder_init_abi(uint32_t counts) {
 	// Initialize variables
 	index_found = false;
 	enc_counts = counts;
+	enc_abs_count = 0;
 
-	palSetPadMode(HW_HALL_ENC_GPIO1, HW_HALL_ENC_PIN1, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
-	palSetPadMode(HW_HALL_ENC_GPIO2, HW_HALL_ENC_PIN2, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
-//	palSetPadMode(HW_HALL_ENC_GPIO3, HW_HALL_ENC_PIN3, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
+	palSetPadMode(HW_ENC_GPIO1, HW_ENC_PIN1, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
+	palSetPadMode(HW_ENC_GPIO2, HW_ENC_PIN2, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
+	palSetPadMode(HW_ENC_GPIO3, HW_ENC_PIN3, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
 
 	// Enable timer clock
 	HW_ENC_TIM_CLK_EN();
@@ -184,9 +189,15 @@ bool encoder_is_configured(void) {
 float encoder_read_deg(void) {
 	static float angle = 0.0;
 
+	const unsigned int hw_cnt = HW_ENC_TIM->CNT;
 	switch (mode) {
+
+	// ABI encoder use is configured to report total encoder counts as opposed to a count
+	// that resets to 0 after passing the encoder index.
 	case ENCODER_MODE_ABI:
-		angle = ((float)HW_ENC_TIM->CNT * 360.0) / (float)enc_counts;
+
+		add_encoder_ticks(hw_cnt);
+		angle = ((float)hw_cnt * 360.0) / (float)enc_counts;
 		break;
 
 	case ENCODER_MODE_AS5047P_SPI:
@@ -201,6 +212,78 @@ float encoder_read_deg(void) {
 }
 
 /**
+ *  Takes care of all of the logic for keeping track of encoder counts.
+ *
+ *  The first case we check for, "last_enc_count == 0", is to see if the index interrupt
+ *  occurred, since we reset both the HW_ENC_TIM count as well as last_enc_count in response
+ *  to that interrupt.
+ */
+static void add_encoder_ticks(const unsigned int current_enc_count)
+{
+	// find the difference between the encoder count now and the encoder count at the 
+	// last timer interrupt, and add that value to the absolute counter
+
+	int diff;
+
+	if (last_enc_count == 0)
+	{
+		// if the current count is greater than half the total count, assume we
+		// moved backward from 0
+		if (current_enc_count >= (enc_counts / 2))
+		{
+			diff = -1.0 * (enc_counts - current_enc_count);
+		}
+
+		// else, assume we moved forwards from 0
+		else
+		{
+			diff = current_enc_count;
+		}
+	}
+
+	// moved forwards normally or backwards through index
+	else if (current_enc_count >= last_enc_count)
+	{
+
+		if ((current_enc_count - last_enc_count) > (enc_counts / 2))
+		{
+			// assume moved backward through index
+			diff = -1.0 * (last_enc_count + enc_counts - current_enc_count);
+		}
+
+		else
+		{
+			diff = current_enc_count - last_enc_count;
+		}
+	}
+
+	// moving backwards normally or moved forwards through index?
+	else
+	{
+
+		if ((last_enc_count - current_enc_count) > (enc_counts / 2))
+		{
+			// assume moved through index
+			diff = current_enc_count + enc_counts - last_enc_count;
+		}
+
+		else
+		{
+			diff = -1.0 * (last_enc_count - current_enc_count);
+		}
+	}
+
+	last_enc_count = current_enc_count;
+	enc_abs_count += diff;
+}
+
+enc_abs_count_t encoder_abs_count(void)
+{
+	// add_encoder_ticks(HW_ENC_TIM->CNT);
+	return (enc_abs_count_t)enc_abs_count;
+}
+
+/**
  * Reset the encoder counter. Should be called from the index interrupt.
  */
 void encoder_reset(void) {
@@ -210,7 +293,7 @@ void encoder_reset(void) {
 	__NOP();
 	__NOP();
 	__NOP();
-	if (palReadPad(HW_HALL_ENC_GPIO3, HW_HALL_ENC_PIN3)) {
+	if (palReadPad(HW_ENC_GPIO3, HW_ENC_PIN3)) {
 		const unsigned int cnt = HW_ENC_TIM->CNT;
 		static int bad_pulses = 0;
 		const unsigned int lim = enc_counts / 20;
@@ -218,6 +301,8 @@ void encoder_reset(void) {
 		if (index_found) {
 			// Some plausibility filtering.
 			if (cnt > (enc_counts - lim) || cnt < lim) {
+				add_encoder_ticks(cnt);
+				last_enc_count = 0;
 				HW_ENC_TIM->CNT = 0;
 				bad_pulses = 0;
 			} else {
@@ -228,7 +313,9 @@ void encoder_reset(void) {
 				}
 			}
 		} else {
+			add_encoder_ticks(cnt);
 			HW_ENC_TIM->CNT = 0;
+			last_enc_count = 0;
 			index_found = true;
 			bad_pulses = 0;
 		}
@@ -261,6 +348,11 @@ void encoder_set_counts(uint32_t counts) {
 		TIM_SetAutoreload(HW_ENC_TIM, enc_counts - 1);
 		index_found = false;
 	}
+}
+
+uint32_t encoder_counts(void)
+{
+	return enc_counts;
 }
 
 /**

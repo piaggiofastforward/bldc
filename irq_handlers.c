@@ -26,6 +26,7 @@
 #include "servo.h"
 #include "hw.h"
 #include "encoder.h"
+#include "ext_handler.h"
 
 #if SERVO_OUT_ENABLE && !SERVO_OUT_SIMPLE
 CH_IRQ_HANDLER(TIM7_IRQHandler) {
@@ -50,6 +51,16 @@ CH_IRQ_HANDLER(HW_ENC_EXTI_ISR_VEC) {
 		// Clear the EXTI line pending bit
 		EXTI_ClearITPendingBit(HW_ENC_EXTI_LINE);
 	}
+}
+
+CH_IRQ_HANDLER(HW_ESTOP_EXTI_ISR_VEC) {
+  CH_IRQ_PROLOGUE();
+
+  estop_state_change_handler();
+
+  // Clear the EXTI line pending bit
+  EXTI_ClearITPendingBit(HW_ESTOP_EXTI_LINE);
+  CH_IRQ_EPILOGUE();
 }
 
 CH_IRQ_HANDLER(HW_ENC_TIM_ISR_VEC) {
