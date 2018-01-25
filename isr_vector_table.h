@@ -26,7 +26,7 @@
 #define CAN1_RX0_IRQHandler     Vector90    /**< CAN1 RX0.                  */
 #define CAN1_RX1_IRQHandler     Vector94    /**< CAN1 RX1.                  */
 #define CAN1_SCE_IRQHandler     Vector98    /**< CAN1 SCE.                  */
-//#define EXTI9_5_IRQHandler      Vector9C    /**< EXTI Line 9..5.            */
+#define EXTI9_5_IRQHandler      Vector9C    /**< EXTI Line 9..5.            */
 #define TIM1_BRK_IRQHandler     VectorA0    /**< TIM1 Break.                */
 #define TIM1_UP_IRQHandler      VectorA4    /**< TIM1 Update.               */
 #define TIM1_TRG_COM_IRQHandler VectorA8    /**< TIM1 Trigger and
