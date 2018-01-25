@@ -35,7 +35,6 @@
 #include "control_msgs.h"
 #include "mc_interface.h"  // motor control functions
 #include "timeout.h"       // timeout_reset()
-// #include "ext_lld.h"
 #include "uart_mc_config.h"
 #include "encoder.h"
 
@@ -188,7 +187,7 @@ void confirmationEcho(void);
  * Each pin can have at most one interrupt across GPIO sets.
  * Each index maps to a pin.
  *
- * ESTOP     -> PC0 (pin 8)
+ * ESTOP     -> PC5 (pin 8)
  * FWD_LIMIT -> PA5 (pin 21)
  * REV_LIMIT -> PA6 (pin 22)
  *
@@ -202,33 +201,6 @@ void confirmationEcho(void);
 #define FWDLIM_PORT      GPIOA
 #define REVLIM_PORT      GPIOA
 
-// static const EXTConfig extcfg = {
-//   {
-//     {EXT_CH_MODE_DISABLED, NULL},    
-//     {EXT_CH_MODE_DISABLED, NULL},    
-//     {EXT_CH_MODE_DISABLED, NULL},    
-//     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_fwd_limit},
-//     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, toggle_rev_limit},
-//     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOC, toggle_estop},
-//     {EXT_CH_MODE_DISABLED, NULL},   
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL},
-//     {EXT_CH_MODE_DISABLED, NULL}
-//   }
-// };
 
 
 /*
@@ -454,7 +426,6 @@ static void initHardware()
   palSetPadMode(FWDLIM_PORT, FWDLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
   palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
 
-  // extStart(&EXTD1, &extcfg);
   estop     = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX)   == PAL_LOW;
   rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
   fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
@@ -598,17 +569,22 @@ static THD_FUNCTION(packet_process_thread, arg)
     }
 
     /**
-     * TODO: proper handling of estop (brake? or just set command to 0?)
+     *  Since we want the robot to be able to roll around when the estop is pressed, simply
+     *  set a 0.0 current on the motor in response to estop press.
      */
 		if (estop)
 		{
-      mcpwm_foc_stop_pwm();
-			// mc_interface_set_brake_current(0);
+      mc_interface_set_current(0.0);
 		}
-		else if (!shouldMove())
-		{
-			// mc_interface_brake_now();
-		}
+
+    /**
+     *  This can probably be removed since we wont be using optical encoders with limit switches, we will be
+     * transitioning to an absolute magnetic position sensor
+     */
+		// else if (!shouldMove())
+		// {
+		// 	// mc_interface_brake_now();
+		// }
 
     else if (commandReceived)
 		{
@@ -771,7 +747,10 @@ void setCommand()
     case SPEED:
       fb.feedback.commanded_value = currentCommand.target_cmd_i;
       echoCommand();
-      // mc_interface_set_pid_speed(currentCommand.target_cmd_f);
+
+      // cast this to a float, which is ABSOLUTELY NOT the same as substituting
+      // currentCommand.target_cmd_f........
+      mc_interface_set_pid_speed((float)currentCommand.target_cmd_i);
       break;
     // case CURRENT:
     //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000; 
