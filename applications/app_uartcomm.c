@@ -130,6 +130,12 @@ void sendStatus(void);
 void updateStatus(void);
 
 /**
+ *  In response to an interrupt from the estop pin, wait to account for button debounce,
+ *  then read the pin.
+ */
+#define ESTOP_DEBOUNCE_MS 15  // PLENTY
+static void read_estop_wait();
+/**
  *  Enable/disable the virtual timer interrupts that prompt us to send feedback/status data. This 
  *  will be used when we get an FOC detection request.
  */
@@ -178,6 +184,9 @@ static volatile bool packetLengthReceived = false;
 // set this to true after calling uartStartReceive(), set back to false in rxEnd()
 static volatile bool uartReceiving = false;
 
+// this will be set through ext_handler in response to an interrupt on the estop pin
+static volatile bool shouldReadEstop = false;
+
 /**
  * For testing purposes!
  */
@@ -200,12 +209,8 @@ void confirmationEcho(void);
 // #define ESTOP_PIN_INDEX  5
 #define FWDLIM_PIN_INDEX 3
 #define REVLIM_PIN_INDEX 4
-// #define ESTOP_PORT       GPIOC
 #define FWDLIM_PORT      GPIOA
 #define REVLIM_PORT      GPIOA
-
-#define READ_ESTOP() (palReadPad(HW_ESTOP_PORT, HW_ESTOP_PIN) == PAL_LOW)
-
 
 /*
  * This callback is invoked when a transmission buffer has been completely
@@ -501,6 +506,12 @@ static THD_FUNCTION(packet_process_thread, arg)
 	{
 		chEvtWaitAny((eventmask_t) 1);
 
+    if (shouldReadEstop)
+    {
+      read_estop_wait();
+      shouldReadEstop = false;
+    }
+
     /**
      * We can receive data in 2 ways:
      * 
@@ -574,15 +585,7 @@ static THD_FUNCTION(packet_process_thread, arg)
       shouldSendStatus = false;
     }
 
-    /**
-     *  Since we want the robot to be able to roll around when the estop is pressed, simply
-     *  set a 0.0 current on the motor in response to estop press.
-     */
-		if (estop)
-		{
-      mc_interface_set_current(0.0);
-		}
-
+    
     /**
      *  This can probably be removed since we wont be using optical encoders with limit switches, we will be
      * transitioning to an absolute magnetic position sensor
@@ -592,7 +595,8 @@ static THD_FUNCTION(packet_process_thread, arg)
 		// 	// mc_interface_brake_now();
 		// }
 
-    else if (commandReceived)
+    // don't give commands unless the estop is not pressed down
+    if (commandReceived && !estop)
 		{
 			setCommand();
 			commandReceived = false;
@@ -716,7 +720,7 @@ void updateFeedback(void)
   fb.feedback.measured_position = encoder_abs_count();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
-  fb.feedback.switch_flags      = (estop << 2) | (rev_limit << 1) | (fwd_limit); 
+  fb.feedback.switch_flags      = estop;
 }
 
 /**
@@ -835,8 +839,14 @@ static void detectHallTableFoc(void)
 
 void app_handle_estop_interrupt(void)
 {
-  estop = READ_ESTOP();
+  shouldReadEstop = true;
   chEvtSignalI(process_tp, (eventmask_t) 1);
+}
+
+static void read_estop_wait()
+{
+  chThdSleepMilliseconds(ESTOP_DEBOUNCE_MS);
+  estop = READ_ESTOP();
 }
 
 /*

@@ -232,12 +232,12 @@
 #define ADC_V_ZERO				(ADC_Value[ADC_IND_VIN_SENS] / 2)
 
 // Macros
-// #define READ_HALL1()            palReadPad(HW_HALL_ENC_GPIO1, HW_HALL_ENC_PIN1)
-// #define READ_HALL2()            palReadPad(HW_HALL_ENC_GPIO2, HW_HALL_ENC_PIN2)
-// #define READ_HALL3()            palReadPad(HW_HALL_ENC_GPIO3, HW_HALL_ENC_PIN3)
 #define READ_HALL1()			palReadPad(HW_HALL_GPIO1, HW_HALL_PIN1)
 #define READ_HALL2()			palReadPad(HW_HALL_GPIO2, HW_HALL_PIN2)
 #define READ_HALL3()			palReadPad(HW_HALL_GPIO3, HW_HALL_PIN3)
+
+// note: this assumes that the estop pin is active high
+#define READ_ESTOP() (palReadPad(HW_ESTOP_PORT, HW_ESTOP_PIN) == PAL_HIGH)
 
 // Default setting overrides
 #ifndef MCCONF_DEFAULT_MOTOR_TYPE
