@@ -30,6 +30,7 @@
 #include "app.h"
 #include "ch.h"
 #include "hal.h"
+#include "conf_general.h"
 #include "hw.h"
 #include "packet.h"
 #include "control_msgs.h"
@@ -194,13 +195,33 @@ void confirmationEcho(void);
  * Pass the GPIO base (eg. GPIO_A) as the first argument to underlying EXTChannelConfig
  * struct, and the index in this EXTConfig instance represents the pin index.
  */
-#define ESTOP_PIN_INDEX  5
+
+// limit switches are probably going to be removed, and estop pin definitions have moved to hw60.h
+// #define ESTOP_PIN_INDEX  5
 #define FWDLIM_PIN_INDEX 3
 #define REVLIM_PIN_INDEX 4
-#define ESTOP_PORT       GPIOC
+// #define ESTOP_PORT       GPIOC
 #define FWDLIM_PORT      GPIOA
 #define REVLIM_PORT      GPIOA
 
+
+static void configureEXT()
+{
+  EXTI_InitTypeDef EXTI_InitStructure;
+
+  // connect EXTI line to pin
+  SYSCFG_EXTILineConfig(HW_ESTOP_EXTI_PORTSRC, HW_ESTOP_EXTI_PINSRC);
+
+  // configure the EXTI line
+  EXTI_InitStructure.EXTI_Line = HW_ESTOP_EXTI_LINE;
+  EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
+  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising_Falling;
+  EXTI_InitStructure.EXTI_LineCmd = ENABLE;
+  EXTI_Init(&EXTI_InitStructure);
+
+  // enable interrupt, set status to highest priority
+  nvicEnableVector(HW_ESTOP_EXTI_CH, 0);
+}
 
 
 /*
@@ -419,16 +440,17 @@ static void initHardware()
       PAL_STM32_OSPEED_HIGHEST |
       PAL_STM32_PUDR_PULLUP);
 
-  palClearPad(ESTOP_PORT, ESTOP_PIN_INDEX);
+  palClearPad(HW_ESTOP_PORT, HW_ESTOP_PIN);
   palClearPad(FWDLIM_PORT, FWDLIM_PIN_INDEX);
   palClearPad(REVLIM_PORT, REVLIM_PIN_INDEX);
-  palSetPadMode(ESTOP_PORT, ESTOP_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
+  palSetPadMode(HW_ESTOP_PORT, HW_ESTOP_PIN, PAL_MODE_INPUT_PULLUP);
   palSetPadMode(FWDLIM_PORT, FWDLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
   palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
 
-  estop     = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX)   == PAL_LOW;
+  estop     = palReadPad(HW_ESTOP_PORT, HW_ESTOP_PIN)   == PAL_LOW;
   rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
   fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
+  configureEXT();
 }
 
 void app_uartcomm_start(void)

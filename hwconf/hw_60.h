@@ -20,6 +20,8 @@
 #ifndef HW_60_H_
 #define HW_60_H_
 
+#include "isr_vector_table.h"
+
 #define HW_NAME					"60"
 
 // HW properties
@@ -183,6 +185,15 @@
 #define HW_ENC_EXTI_ISR_VEC		EXTI0_IRQHandler
 #define HW_ENC_TIM_ISR_CH		TIM3_IRQn
 #define HW_ENC_TIM_ISR_VEC		TIM3_IRQHandler
+
+// estop definitions
+#define HW_ESTOP_PIN          5
+#define HW_ESTOP_PORT         GPIOC
+#define HW_ESTOP_EXTI_PORTSRC EXTI_PortSourceGPIOC
+#define HW_ESTOP_EXTI_PINSRC  EXTI_PinSource5
+#define HW_ESTOP_EXTI_CH      EXTI9_5_IRQn
+// #define HW_ESTOP_EXTI_LINE    EXTI9_5_IRQHandler
+#define HW_ESTOP_EXTI_LINE    EXTI0_IRQHandler
 
 // NRF pins
 #define NRF_PORT_CSN			GPIOB
