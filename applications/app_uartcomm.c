@@ -205,7 +205,7 @@ void confirmationEcho(void);
 #define REVLIM_PORT      GPIOA
 
 
-static void configureEXT()
+void configureEXT()
 {
   EXTI_InitTypeDef EXTI_InitStructure;
 
@@ -222,6 +222,7 @@ static void configureEXT()
   // enable interrupt, set status to highest priority
   nvicEnableVector(HW_ESTOP_EXTI_CH, 0);
 }
+
 
 
 /*
@@ -450,7 +451,7 @@ static void initHardware()
   estop     = palReadPad(HW_ESTOP_PORT, HW_ESTOP_PIN)   == PAL_LOW;
   rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
   fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
-  configureEXT();
+  // configureEXT();
 }
 
 void app_uartcomm_start(void)
