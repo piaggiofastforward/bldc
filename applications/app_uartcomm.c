@@ -204,25 +204,7 @@ void confirmationEcho(void);
 #define FWDLIM_PORT      GPIOA
 #define REVLIM_PORT      GPIOA
 
-
-void configureEXT()
-{
-  EXTI_InitTypeDef EXTI_InitStructure;
-
-  // connect EXTI line to pin
-  SYSCFG_EXTILineConfig(HW_ESTOP_EXTI_PORTSRC, HW_ESTOP_EXTI_PINSRC);
-
-  // configure the EXTI line
-  EXTI_InitStructure.EXTI_Line = HW_ESTOP_EXTI_LINE;
-  EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
-  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising_Falling;
-  EXTI_InitStructure.EXTI_LineCmd = ENABLE;
-  EXTI_Init(&EXTI_InitStructure);
-
-  // enable interrupt, set status to highest priority
-  nvicEnableVector(HW_ESTOP_EXTI_CH, 0);
-}
-
+#define READ_ESTOP() (palReadPad(HW_ESTOP_PORT, HW_ESTOP_PIN) == PAL_LOW)
 
 
 /*
@@ -448,10 +430,11 @@ static void initHardware()
   palSetPadMode(FWDLIM_PORT, FWDLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
   palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
 
-  estop     = palReadPad(HW_ESTOP_PORT, HW_ESTOP_PIN)   == PAL_LOW;
+  estop     = READ_ESTOP();
   rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
   fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
-  // configureEXT();
+  configureEXT();
+  set_estop_callback(app_handle_estop_interrupt);
 }
 
 void app_uartcomm_start(void)
@@ -848,6 +831,12 @@ static void detectHallTableFoc(void)
     response[index++] = res ? 1 : 0;
     send_packet_wrapper(response, 10);
   }
+}
+
+void app_handle_estop_interrupt(void)
+{
+  estop = READ_ESTOP();
+  chEvtSignalI(process_tp, (eventmask_t) 1);
 }
 
 /*
