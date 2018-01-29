@@ -42,7 +42,7 @@ class DataHandler():
 
         display_str = ''
         for x in new_data:
-            display_str = display_str + int(x) + ', '
+            display_str = display_str + str(x) + ', '
         print display_str
 
         if PACKET_HEADER not in new_data and PACKET_FOOTER not in new_data:
