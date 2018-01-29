@@ -1311,6 +1311,12 @@ static THD_FUNCTION(rpm_thread, arg) {
 
 		run_pid_control_speed();
 
+
+		// the encoder absolute counts will be updated as a result of run_pid_control_pos,
+		// so only do it here if necessary
+		if ((control_mode != CONTROL_MODE_POS) && encoder_is_configured())
+			encoder_update_abs_count();
+
 		chThdSleepMilliseconds(1);
 	}
 }

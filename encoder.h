@@ -32,8 +32,17 @@ void encoder_reset(void);
 void encoder_tim_isr(void);
 void encoder_set_counts(uint32_t counts);
 
+// the number of encoder counts per revolution 
 uint32_t encoder_counts(void);
+
+// has the encoder index pin triggered an interrupt since startup??
 bool encoder_index_found(void);
+
+/**
+ *  Update the internal absolute encoder count by examining the current counts in the hardware
+ *  timer that keeps track of encoder pulses.
+ */
+void encoder_update_abs_count(void);
  
 /**
  *  Keep track of absolute encoder ticks since we probably want to use that instead of rotor angle.
