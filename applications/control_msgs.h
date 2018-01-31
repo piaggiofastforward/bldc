@@ -2,7 +2,6 @@
 #define __I2C_MSGS_H__
 #include <stdint.h>
 #include <stdbool.h>
-#include "encoder.h"
 
 #ifdef PLATFORM_IS_LINUX
   #define ENUM_SIZE : uint8_t
@@ -28,13 +27,13 @@ enum mc_packet_type ENUM_SIZE {
   CONTROL_WRITE,
   CONFIG_WRITE,
   CONFIG_WRITE_HALL,        // only for HALL_TABLE and HALL_TABLE_FOC
-  COMMIT_MC_CONFIG,        // use after many CONFIG_WRITE*s in order to actually effect the changes
+  COMMIT_MC_CONFIG,         // use after many CONFIG_WRITE*s in order to actually effect the changes
   REQUEST_DETECT_HALL_FOC,  // use to perform FOC hall table calibration routine
   RESPONSE_DETECT_HALL_FOC, // use for response containing foc hall table data
 };
 
 /**
- *  8 value bytes + 1 byte (success/fail)
+ *  8 value bytes + 1 bytes (success/fail)
  */
 #define RESPONSE_DETECT_HALL_FOC_SIZE 9
 
@@ -158,16 +157,17 @@ enum mc_config_param ENUM_SIZE {
 
 
 /**
- *  This struct should be used to give BOTH speed and current commands.
+ *  This struct should be used to give BOTH speed and current commands. The __attribute__ is used
+ *  to ensure that the struct below is the exact size of the parameters within, with no extra
+ *  padding.
  */
 typedef struct {
   union {
     float target_cmd_f;
     int32_t target_cmd_i;
   };
-  float current_limit;
   enum mc_control_mode control_mode;
-} mc_cmd;
+} __attribute__((packed, aligned(1))) mc_cmd;
 
 typedef union {
   mc_cmd cmd;
