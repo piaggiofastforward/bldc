@@ -449,8 +449,12 @@ void app_uartcomm_start(void)
   initHardware();
 
   mcconf = *mc_interface_get_configuration();
+
+  #if APP_USE_ENCODER
+    encoder_init_abi(mcconf.m_encoder_counts);
+  #endif
   /* (void) getStringPotValue; */
-  mc_interface_set_pid_pos_src(getStringPotValue);
+  // mc_interface_set_pid_pos_src(getStringPotValue);
 
 	is_running = 1;
 
@@ -716,7 +720,6 @@ void updateFeedback(void)
 {
   fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
-  // fb.feedback.measured_position = mc_interface_get_pid_pos_now();
   fb.feedback.measured_position = encoder_abs_count();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();

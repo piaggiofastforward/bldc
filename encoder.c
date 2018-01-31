@@ -211,6 +211,16 @@ float encoder_read_deg(void) {
 	return angle;
 }
 
+void encoder_update_abs_count(void) {
+	switch (mode) {
+	case ENCODER_MODE_ABI:
+		add_encoder_ticks(HW_ENC_TIM->CNT);
+		break;
+	default:
+		break;
+	}
+}
+
 /**
  *  Takes care of all of the logic for keeping track of encoder counts.
  *
@@ -275,12 +285,6 @@ static void add_encoder_ticks(const unsigned int current_enc_count)
 
 	last_enc_count = current_enc_count;
 	enc_abs_count += diff;
-}
-
-enc_abs_count_t encoder_abs_count(void)
-{
-	// add_encoder_ticks(HW_ENC_TIM->CNT);
-	return (enc_abs_count_t)enc_abs_count;
 }
 
 /**
@@ -350,9 +354,21 @@ void encoder_set_counts(uint32_t counts) {
 	}
 }
 
+/**
+ *  Return the number of encoder counts per revolution.
+ */
 uint32_t encoder_counts(void)
 {
 	return enc_counts;
+}
+
+/**
+ *  Return the absolute encoder count, which is the total of all ticks in either direction
+ *  since startup.
+ */
+enc_abs_count_t encoder_abs_count(void)
+{
+	return (enc_abs_count_t)enc_abs_count;
 }
 
 /**
