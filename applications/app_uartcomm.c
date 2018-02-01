@@ -324,6 +324,7 @@ static void process_packet(unsigned char *data, unsigned int len)
 	(void)len;
   mc_config_union config;
   mc_config_hall_union config_hall;
+  mc_config_current_pid_union config_i_pid;
 
 	switch (data[0])
 	{
@@ -331,6 +332,11 @@ static void process_packet(unsigned char *data, unsigned int len)
 
 			// need to implement
 			break;
+
+    case CONFIG_WRITE_CURRENT_PID:
+      extractCurrentPIDDataF(config_i_pid, data);
+      sendCurrentPIDData(send_packet_wrapper, config_i_pid);
+      break;
 
 		case CONTROL_WRITE:
       extractCommand(data, len, &currentCommand);
