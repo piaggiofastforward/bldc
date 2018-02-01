@@ -753,12 +753,10 @@ void setCommand()
 {
   switch (currentCommand.control_mode) {
     case SPEED:
-      fb.feedback.commanded_value = currentCommand.target_cmd_i;
       echoCommand();
       mc_interface_set_pid_speed((float)currentCommand.target_cmd_i);
       break;
     case CURRENT:
-      fb.feedback.commanded_value = (float)currentCommand.target_cmd_i / 1000.0; 
       echoCommand();
       mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
       break;

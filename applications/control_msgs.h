@@ -222,7 +222,6 @@ typedef union {
 // The struct that represents a feedback message
 typedef struct {
   float motor_current;
-  int32_t commanded_value;
   int32_t measured_velocity;
   uint32_t measured_position;
   float supply_voltage;
