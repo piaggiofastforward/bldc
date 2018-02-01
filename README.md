@@ -35,12 +35,12 @@ packet_type (1)        // member of enum mc_packet_type
 packet_data (variable)
 ```
 
-Here's the packet types currently implemented:
+Here's the packet types currently implemented (packet types are all members of `enum mc_packet_type`):
 
 ### CONTROL_WRITE ###
 
 ```
-control_mode (1)  // member of enum mc_control_mode
+control_mode (1)        // member of enum mc_control_mode
 command      (variable)
 
 -------------------------
@@ -49,7 +49,9 @@ CONTROL_MODE       ARG LENGTH           ARG DESCRIPTION
 CURRENT                4                Unsigned int representing current in MILLIAMPS
 ```
 
+### FEEDBACK_DATA | STATUS_DATA ###
 
+See the structure of these fields in the header file.
 
 ## Configuration and Hall Table Detection (UART) ##
 

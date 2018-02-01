@@ -124,9 +124,7 @@ static virtual_timer_t status_task_vt;
 
 static void feedbackTaskCb(void* _);
 static void statusTaskCb(void* _);
-void sendFeedback(void);
 void updateFeedback(void);
-void sendStatus(void);
 void updateStatus(void);
 
 /**
@@ -578,12 +576,14 @@ static THD_FUNCTION(packet_process_thread, arg)
      */
 		if (shouldSendFeedback)
     {
-      sendFeedback();
+      updateFeedback();
+      sendFeedbackData(send_packet_wrapper, fb);
       shouldSendFeedback = false;
     }
     if (shouldSendStatus)
     {
-      sendStatus();
+      updateStatus();
+      sendStatusData(send_packet_wrapper, status);
       shouldSendStatus = false;
     }
 
@@ -721,32 +721,11 @@ void updateFeedback(void)
   fb.feedback.switch_flags      = estop;
 }
 
-/**
- * Send our current feedback data.
- */
-void sendFeedback(void)
-{
-	updateFeedback();
-  uint8_t data[sizeof(mc_feedback) + 1];
-  data[0] = FEEDBACK_DATA;
-  memcpy(data + 1, fb.feedback_bytes, sizeof(mc_feedback));
-	send_packet_wrapper(data, sizeof(data));
-}
-
 void updateStatus(void)
 {
   status.status.fault_code = mc_interface_get_fault();
   status.status.temp       = NTC_TEMP(ADC_IND_TEMP_MOS);
   status.status.limits_set = min_tacho != INT_MAX && max_tacho != INT_MIN;
-}
-
-void sendStatus(void)
-{
-  updateStatus();
-  uint8_t data[sizeof(mc_status) + 1];
-  data[0] = STATUS_DATA;
-  memcpy(data + 1, status.status_bytes, sizeof(mc_status));
-  send_packet_wrapper(data, sizeof(data));
 }
 
 void setCommand()

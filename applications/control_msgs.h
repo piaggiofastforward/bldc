@@ -162,13 +162,6 @@ typedef struct {
 } mc_cmd;
 
 
-// Send the command with the specified sending function
-void sendCommand(void (*sendFunc)(uint8_t*, unsigned int), mc_cmd cmd);
-
-// extract the command from a data buffer.
-// Return -1 if this is not possible, and 0 otherwise
-int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd);
-
 typedef union {
   mc_cmd cmd;
   uint8_t cmd_bytes[sizeof(mc_cmd)];
@@ -250,5 +243,26 @@ typedef union {
   mc_status status;
   uint8_t status_bytes[sizeof(mc_status)];
 } mc_status_union;
+
+
+
+typedef void (*packetSendFunc)(uint8_t*, unsigned int);
+
+// Send the command with the specified sending function
+void sendCommand(packetSendFunc sendFunc, mc_cmd cmd);
+
+// extract the command from a data buffer.
+// Return -1 if this is not possible, and 0 otherwise
+int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd);
+
+int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_union *status);
+void sendStatusData(packetSendFunc sendFunc, const mc_status_union status);
+int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedback_union *fb);
+void sendFeedbackData(packetSendFunc sendFunc, const mc_feedback_union fb);
+
+// these macros can be used if you are ABSOLUTELY SURE about what structure the packet contains.
+// use at ur own risk :)))) F is for "fast" I suppose
+#define extractStatusDataF(status_union, buf) (memcpy(status_union.status_bytes, buf + 1, sizeof(mc_status)))
+#define extractFeedbackDataF(feedback_union, buf) (memcpy(feedback_union.feedback_bytes, buf + 1, sizeof(mc_feedback)))
 
 #endif
