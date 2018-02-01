@@ -67,6 +67,9 @@ mc_rpm_dep_struct mcpwm_get_rpm_dep(void);
 bool mcpwm_is_dccal_done(void);
 void mcpwm_switch_comm_mode(mc_comm_mode next);
 
+void mcpwm_set_pid_current_parameters(float kp, float ki, float kd);
+void mcpwm_set_pid_current(float amps);
+
 // Interrupt handlers
 void mcpwm_adc_inj_int_handler(void);
 void mcpwm_adc_int_handler(void *p, uint32_t flags);

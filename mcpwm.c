@@ -80,6 +80,7 @@ static volatile mc_rpm_dep_struct rpm_dep;
 static volatile float cycle_integrator_sum;
 static volatile float cycle_integrator_iterations;
 static volatile mc_configuration *conf;
+static volatile mc_current_pid_configuration iq_pid;
 static volatile float pwm_cycles_sum;
 static volatile int pwm_cycles;
 static volatile float last_pwm_cycles_sum;
@@ -1239,6 +1240,52 @@ static void run_pid_control_pos(float dt) {
 	p_term = error * conf->p_pid_kp;
 	i_term += error * (conf->p_pid_ki * dt);
 	d_term = (error - prev_error) * (conf->p_pid_kd / dt);
+
+	// I-term wind-up protection
+	utils_truncate_number(&i_term, -1.0, 1.0);
+
+	// Store previous error
+	prev_error = error;
+
+	// Calculate output
+	float output = p_term + i_term + d_term;
+	utils_truncate_number(&output, -1.0, 1.0);
+
+	current_set = output * conf->lo_current_max;
+}
+
+void mcpwm_set_pid_current_parameters(float kp, float ki, float kd)
+{
+	iq_pid.kp = kp;
+	iq_pid.ki = ki;
+	iq_pid.kd = kd;
+	control_mode = CONTROL_MODE_CURRENT;
+}
+
+void mcpwm_set_pid_current(float setpoint_amps)
+{
+	iq_pid.setpoint = setpoint_amps;
+}
+
+static void run_pid_control_current(float dt) {
+	static float i_term = 0;
+	static float prev_error = 0;
+	float p_term;
+	float d_term;
+
+	// PID is off. Return.
+	if (control_mode != CONTROL_MODE_CURRENT) {
+		i_term = 0;
+		prev_error = 0;
+		return;
+	}
+	// Compute error
+	float error = iq_pid.setpoint - mcpwm_get_tot_current();
+
+	// Compute parameters
+	p_term = error * iq_pid.kp;
+	i_term += error * (iq_pid.ki * dt);
+	d_term = (error - prev_error) * (iq_pid.kd / dt);
 
 	// I-term wind-up protection
 	utils_truncate_number(&i_term, -1.0, 1.0);

@@ -127,6 +127,13 @@ typedef enum {
 } debug_sampling_mode;
 
 typedef struct {
+	float kp;
+	float ki;
+	float kd;
+	float setpoint; // the goal current to achieve, in amps
+} mc_current_pid_configuration;
+
+typedef struct {
 	// Switching and drive
 	mc_pwm_mode pwm_mode;
 	mc_comm_mode comm_mode;
