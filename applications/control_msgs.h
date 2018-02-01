@@ -3,11 +3,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef PLATFORM_IS_LINUX
-  #define ENUM_SIZE : uint8_t
-#else
-  #define ENUM_SIZE 
-#endif
 
 /***************************
  * VESC REQUEST DATATYPES  *
@@ -20,7 +15,7 @@
  * - CONTROL_WRITE, and CONFIG_WRITE are sent from Linux -> VESC  
  * - CONFIG_READ is sent in both directions (Linux -> VESC query as well as VESC -> Linux response)
  */
-enum mc_packet_type ENUM_SIZE {
+enum mc_packet_type {
   FEEDBACK_DATA = 1,
   CONFIG_READ,
   STATUS_DATA,
@@ -38,9 +33,9 @@ enum mc_packet_type ENUM_SIZE {
 #define RESPONSE_DETECT_HALL_FOC_SIZE 9
 
 // An enum to differentiate control modes
-enum mc_control_mode ENUM_SIZE {
+enum mc_control_mode {
   SPEED = 1, // use value_i
-  CURRENT, // use value_f
+  CURRENT, // use value_i, units are in milliamps
   POSITION, // use value_i
   DUTY, // use value_f
   HOMING, // no value set
@@ -50,7 +45,7 @@ enum mc_control_mode ENUM_SIZE {
 // An enum to differentiate config parameters
 // use value_f in request
 // use value in config_value response
-enum mc_config_param ENUM_SIZE {
+enum mc_config_param {
   L_CURRENT_MAX = 1,
   M_SENSOR_PORT_MODE,
   OBSERVER_GAIN_SLOW,
@@ -162,12 +157,17 @@ enum mc_config_param ENUM_SIZE {
  *  padding.
  */
 typedef struct {
-  union {
-    float target_cmd_f;
-    int32_t target_cmd_i;
-  };
+  int32_t target_cmd_i;
   enum mc_control_mode control_mode;
-} __attribute__((packed, aligned(1))) mc_cmd;
+} mc_cmd;
+
+
+// Send the command with the specified sending function
+void sendCommand(void (*sendFunc)(uint8_t*, unsigned int), mc_cmd cmd);
+
+// extract the command from a data buffer.
+// Return -1 if this is not possible, and 0 otherwise
+int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd);
 
 typedef union {
   mc_cmd cmd;
@@ -224,7 +224,7 @@ typedef struct {
   float motor_current;
   int32_t commanded_value;
   int32_t measured_velocity;
-  enc_abs_count_t measured_position;
+  uint32_t measured_position;
   float supply_voltage;
   float supply_current;
   uint32_t switch_flags;
