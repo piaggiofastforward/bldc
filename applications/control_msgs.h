@@ -22,6 +22,7 @@ enum mc_packet_type {
   CONTROL_WRITE,
   CONFIG_WRITE,
   CONFIG_WRITE_HALL,        // only for HALL_TABLE and HALL_TABLE_FOC
+  CONFIG_WRITE_CURRENT_PID, // only for writing current control PID values
   COMMIT_MC_CONFIG,         // use after many CONFIG_WRITE*s in order to actually effect the changes
   REQUEST_DETECT_HALL_FOC,  // use to perform FOC hall table calibration routine
   RESPONSE_DETECT_HALL_FOC, // use for response containing foc hall table data
@@ -168,6 +169,17 @@ typedef union {
 } mc_cmd_union;
 
 typedef struct {
+  float kp;
+  float ki;
+  float kd;
+} mc_config_current_pid;
+
+typedef union {
+  mc_config_current_pid config;
+  uint8_t config_bytes[sizeof(mc_config_current_pid)];
+} mc_config_current_pid_union;
+
+typedef struct {
   union {
     float    value_f;
     int32_t  value_i;
@@ -260,9 +272,13 @@ void sendStatusData(packetSendFunc sendFunc, const mc_status_union status);
 int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedback_union *fb);
 void sendFeedbackData(packetSendFunc sendFunc, const mc_feedback_union fb);
 
+int extractCurrentPIDData(const uint8_t* data, const unsigned int size, mc_config_current_pid_union *config);
+void sendCurrentPIDData(packetSendFunc sendFunc, const mc_config_current_pid_union config);
+
 // these macros can be used if you are ABSOLUTELY SURE about what structure the packet contains.
 // use at ur own risk :)))) F is for "fast" I suppose
 #define extractStatusDataF(status_union, buf) (memcpy(status_union.status_bytes, buf + 1, sizeof(mc_status)))
 #define extractFeedbackDataF(feedback_union, buf) (memcpy(feedback_union.feedback_bytes, buf + 1, sizeof(mc_feedback)))
+#define extractCurrentPIDDataF(cfg_union, buf) (memcpy(cfg_union.config_bytes, buf + 1, sizeof(mc_config_current_pid)))
 
 #endif

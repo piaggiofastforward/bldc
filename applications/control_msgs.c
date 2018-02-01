@@ -89,5 +89,21 @@ int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedbac
     return -1;
   }
   memcpy(fb->feedback_bytes, data + 1, sizeof(mc_feedback));
+}
 
+int extractCurrentPIDData(const uint8_t* data, const unsigned int size, mc_config_current_pid_union *config)
+{
+  if (data[0] != CONFIG_WRITE_CURRENT_PID)
+  {
+    return -1;
+  }
+  memcpy(config->config_bytes, data + 1, sizeof(mc_config_current_pid));
+}
+
+void sendCurrentPIDData(packetSendFunc sendFunc, const mc_config_current_pid_union config)
+{
+  uint8_t data[sizeof(mc_config_current_pid) + 1];
+  data[0] = CONFIG_WRITE_CURRENT_PID;
+  memcpy(data + 1, config.config_bytes, sizeof(mc_config_current_pid));
+  sendFunc(data, sizeof(data));
 }
