@@ -16,6 +16,45 @@ Support for linear motor is in the code, but untested over `UART`.
 
 Both of these tasks are handled through the linux driver located in `pff-ros-ws` on the branch `feature/vesc_ros_driver`
 
+## UART Protocol ##
+
+Packet protocols are like onions. There's layers. In the outermost layer we have the packet interface provided by `vedderb`, with the following structure:
+
+```
+start byte          (1)
+payload length byte (1)
+<payload bytes>
+2 CRC bytes         (2)
+end byte            (1)
+```
+
+The <`payload bytes`> follows our internal message structure. The data types of interest all reside in `applications/control_msgs.h`, and in general, all parsing of those data members should be implemented in `applications/control_msgs.c`.
+
+```
+packet_type (1)        // member of enum mc_packet_type
+packet_data (variable)
+```
+
+Here's the packet types currently implemented:
+
+### CONTROL_WRITE ###
+
+```
+control_mode (1)  // member of enum mc_control_mode
+command      (variable)
+
+-------------------------
+
+CONTROL_MODE       ARG LENGTH           ARG DESCRIPTION
+CURRENT                4                Unsigned int representing current in MILLIAMPS
+```
+
+
+
+## Configuration and Hall Table Detection (UART) ##
+
+There is code to handle this, but the messaging protocol has since changed so proper messaging will have to be re-implemented for these features.
+
 # NOTES #
 
 For hardware version `6.0`, there is an overlap with hardcoded ADC channels and our hardware configuration. The revolution controller has the hall sensors on pins

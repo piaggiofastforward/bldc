@@ -2,13 +2,7 @@
 #define __I2C_MSGS_H__
 #include <stdint.h>
 #include <stdbool.h>
-#include "encoder.h"
 
-#ifdef PLATFORM_IS_LINUX
-  #define ENUM_SIZE : uint8_t
-#else
-  #define ENUM_SIZE 
-#endif
 
 /***************************
  * VESC REQUEST DATATYPES  *
@@ -21,27 +15,27 @@
  * - CONTROL_WRITE, and CONFIG_WRITE are sent from Linux -> VESC  
  * - CONFIG_READ is sent in both directions (Linux -> VESC query as well as VESC -> Linux response)
  */
-enum mc_packet_type ENUM_SIZE {
+enum mc_packet_type {
   FEEDBACK_DATA = 1,
   CONFIG_READ,
   STATUS_DATA,
   CONTROL_WRITE,
   CONFIG_WRITE,
   CONFIG_WRITE_HALL,        // only for HALL_TABLE and HALL_TABLE_FOC
-  COMMIT_MC_CONFIG,        // use after many CONFIG_WRITE*s in order to actually effect the changes
+  COMMIT_MC_CONFIG,         // use after many CONFIG_WRITE*s in order to actually effect the changes
   REQUEST_DETECT_HALL_FOC,  // use to perform FOC hall table calibration routine
   RESPONSE_DETECT_HALL_FOC, // use for response containing foc hall table data
 };
 
 /**
- *  8 value bytes + 1 byte (success/fail)
+ *  8 value bytes + 1 bytes (success/fail)
  */
 #define RESPONSE_DETECT_HALL_FOC_SIZE 9
 
 // An enum to differentiate control modes
-enum mc_control_mode ENUM_SIZE {
+enum mc_control_mode {
   SPEED = 1, // use value_i
-  CURRENT, // use value_f
+  CURRENT, // use value_i, units are in milliamps
   POSITION, // use value_i
   DUTY, // use value_f
   HOMING, // no value set
@@ -51,7 +45,7 @@ enum mc_control_mode ENUM_SIZE {
 // An enum to differentiate config parameters
 // use value_f in request
 // use value in config_value response
-enum mc_config_param ENUM_SIZE {
+enum mc_config_param {
   L_CURRENT_MAX = 1,
   M_SENSOR_PORT_MODE,
   OBSERVER_GAIN_SLOW,
@@ -158,16 +152,22 @@ enum mc_config_param ENUM_SIZE {
 
 
 /**
- *  This struct should be used to give BOTH speed and current commands.
+ *  This struct should be used to give BOTH speed and current commands. The __attribute__ is used
+ *  to ensure that the struct below is the exact size of the parameters within, with no extra
+ *  padding.
  */
 typedef struct {
-  union {
-    float target_cmd_f;
-    int32_t target_cmd_i;
-  };
-  float current_limit;
+  int32_t target_cmd_i;
   enum mc_control_mode control_mode;
 } mc_cmd;
+
+
+// Send the command with the specified sending function
+void sendCommand(void (*sendFunc)(uint8_t*, unsigned int), mc_cmd cmd);
+
+// extract the command from a data buffer.
+// Return -1 if this is not possible, and 0 otherwise
+int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd);
 
 typedef union {
   mc_cmd cmd;
@@ -222,9 +222,8 @@ typedef union {
 // The struct that represents a feedback message
 typedef struct {
   float motor_current;
-  int32_t commanded_value;
   int32_t measured_velocity;
-  enc_abs_count_t measured_position;
+  uint32_t measured_position;
   float supply_voltage;
   float supply_current;
   uint32_t switch_flags;
