@@ -107,7 +107,7 @@ static void sendConfigCommitConfirmation(void);
 static int getStringPotValue(void);
 volatile float *getParamPtr(enum mc_config_param param);
 int32_t descale_position(float pos);
-bool shouldMove(void);
+// bool shouldMove(void);
 void homing_sequence(void);
 // void toggle_estop(EXTDriver *extp, expchannel_t channel); 
 // void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel);
@@ -335,11 +335,9 @@ static void process_packet(unsigned char *data, unsigned int len)
 			break;
 
 		case CONTROL_WRITE:
-
-      memcpy(cmd.cmd_bytes, data + 1, sizeof(mc_cmd));
-			currentCommand = cmd.cmd;
-			commandReceived = true;
-			timeout_reset();
+      extractCommand(data, len, &currentCommand);
+      commandReceived = true;
+      timeout_reset();
 			break;
 
 		case CONFIG_WRITE:
@@ -633,10 +631,7 @@ static THD_FUNCTION(packet_process_thread, arg)
  */
 void echoCommand()
 {
-  uint8_t data[sizeof(mc_cmd) + 1];
-  data[0] = CONTROL_WRITE;
-  memcpy(data + 1, cmd.cmd_bytes, sizeof(mc_cmd));
-  send_packet_wrapper(data, sizeof(data)); 
+  sendCommand(send_packet_wrapper, currentCommand);
 }
 
 void confirmationEcho()
@@ -760,15 +755,13 @@ void setCommand()
     case SPEED:
       fb.feedback.commanded_value = currentCommand.target_cmd_i;
       echoCommand();
-
-      // cast this to a float, which is ABSOLUTELY NOT the same as substituting
-      // currentCommand.target_cmd_f........
       mc_interface_set_pid_speed((float)currentCommand.target_cmd_i);
       break;
-    // case CURRENT:
-    //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000; 
-    //   mc_interface_set_current(currentCommand.target_cmd_f);
-    //   break;
+    case CURRENT:
+      fb.feedback.commanded_value = (float)currentCommand.target_cmd_i / 1000.0; 
+      echoCommand();
+      mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
+      break;
     // case DUTY:
     //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;
     //   mc_interface_set_duty(currentCommand.target_cmd_f);
@@ -883,36 +876,36 @@ void homing_sequence(void)
 
 /*
  * Returns true if the limit switch is not set in the desired direction
- */
-bool shouldMove(void) 
-{
-  bool isForward = true;
-  switch (currentCommand.control_mode) {
-    case POSITION:
-      isForward = currentCommand.target_cmd_i - mc_interface_get_tachometer_value(false) > 0;
-      break;
-    case SCALE_POS:
-      isForward = descale_position(currentCommand.target_cmd_f / 1000.0f) > 0 - 
-        mc_interface_get_tachometer_value(false);
-      break;
-    case SPEED:
-      isForward = currentCommand.target_cmd_i > 0;
-      break;
-    case HOMING:
-      if (max_tacho == INT_MIN) {
-        isForward = true;
-      } else if (min_tacho == INT_MAX) {
-        isForward = false;
-      }
-    case CURRENT:
-    case DUTY:
-      isForward = currentCommand.target_cmd_f > 0;
-      break;
-  }
+//  */
+// bool shouldMove(void) 
+// {
+//   bool isForward = true;
+//   switch (currentCommand.control_mode) {
+//     case POSITION:
+//       isForward = currentCommand.target_cmd_i - mc_interface_get_tachometer_value(false) > 0;
+//       break;
+//     case SCALE_POS:
+//       isForward = descale_position(currentCommand.target_cmd_f / 1000.0f) > 0 - 
+//         mc_interface_get_tachometer_value(false);
+//       break;
+//     case SPEED:
+//       isForward = currentCommand.target_cmd_i > 0;
+//       break;
+//     case HOMING:
+//       if (max_tacho == INT_MIN) {
+//         isForward = true;
+//       } else if (min_tacho == INT_MAX) {
+//         isForward = false;
+//       }
+//     case CURRENT:
+//     case DUTY:
+//       isForward = currentCommand.target_cmd_f > 0;
+//       break;
+//   }
 
-  // Return false if the limit switch for the current direction is triggered
-  return !(isForward ? fwd_limit : rev_limit);
-}
+//   // Return false if the limit switch for the current direction is triggered
+//   return !(isForward ? fwd_limit : rev_limit);
+// }
 
 // /*
 //  * Reads the estop value and disables control if it is set
