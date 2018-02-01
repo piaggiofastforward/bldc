@@ -1,10 +1,11 @@
+
 #include "control_msgs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // Send the command with the specified sending function
-void sendCommand(void (*sendFunc)(uint8_t*, unsigned int), mc_cmd cmd)
+void sendCommand(packetSendFunc sendFunc, mc_cmd cmd)
 {
 
   /**
@@ -29,6 +30,27 @@ void sendCommand(void (*sendFunc)(uint8_t*, unsigned int), mc_cmd cmd)
   sendFunc(data, size);
 }
 
+/**
+ *  In general, we can get away with implicit casting for status and feedback through the use of unions,
+ *  since the size of the underlying struct is the same on x86 and cortex-m4 (through the use of specific
+ *  types such as uint32_t, int16_t, etc).
+ */
+void sendStatusData(packetSendFunc sendFunc, const mc_status_union status)
+{
+  uint8_t data[sizeof(mc_status) + 1];
+  data[0] = STATUS_DATA;
+  memcpy(data + 1, status.status_bytes, sizeof(mc_status));
+  sendFunc(data, sizeof(data));
+}
+
+void sendFeedbackData(packetSendFunc sendFunc, const mc_feedback_union fb)
+{
+  uint8_t data[sizeof(mc_feedback) + 1];
+  data[0] = FEEDBACK_DATA;
+  memcpy(data + 1, fb.feedback_bytes, sizeof(mc_feedback));
+  sendFunc(data, sizeof(data));
+}
+
 // extract the command from a data buffer.
 // Return -1 if this is not possible, and 0 otherwise
 int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd)
@@ -48,5 +70,24 @@ int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd)
     default:
       printf("Only prepared to handle speed and current commands\n");
   }
+}
+
+int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_union *status)
+{
+  if (data[0] != STATUS_DATA)
+  {
+    return -1;
+  }
+  memcpy(status->status_bytes, data + 1, sizeof(mc_status));
+}
+
+
+int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedback_union *fb)
+{
+  if (data[0] != FEEDBACK_DATA)
+  {
+    return -1;
+  }
+  memcpy(fb->feedback_bytes, data + 1, sizeof(mc_feedback));
 
 }
