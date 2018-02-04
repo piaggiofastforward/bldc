@@ -82,6 +82,8 @@ void mc_interface_mc_timer_isr(void);
 // Interrupt handlers
 void mc_interface_adc_inj_int_handler(void);
 
+void mc_interface_set_pid_current_parameters(float kp, float ki, float kd);
+
 // External variables
 extern volatile uint16_t ADC_Value[];
 extern volatile int ADC_curr_norm_value[];

@@ -92,8 +92,6 @@ static volatile bool uartReceiving = false;
 // this will be set through ext_handler in response to an interrupt on the estop pin
 static volatile bool shouldReadEstop = false;
 
-static volatile bool updateCurrentPIDReceived = false;
-
 /**
  * Structs to hold various transaction and state data.
  */
@@ -132,7 +130,7 @@ void updateStatus(void);
  *  then read the pin.
  */
 #define ESTOP_DEBOUNCE_MS 15  // PLENTY
-static void read_estop_wait();
+static void read_estop_wait(void);
 /**
  *  Enable/disable the virtual timer interrupts that prompt us to send feedback/status data. This 
  *  will be used when we get an FOC detection request.
@@ -311,6 +309,15 @@ static void process_packet(unsigned char *data, unsigned int len)
 
     case CONFIG_WRITE_CURRENT_PID:
       extractCurrentPIDDataF(config_i_pid, data);
+
+      // should we do something to stop motor operation or something???
+      mc_interface_set_pid_current_parameters(
+        config_i_pid.config.kp,
+        config_i_pid.config.ki,
+        config_i_pid.config.kd
+      );
+
+      // optionally echo it back to the driver
       sendCurrentPIDData(send_packet_wrapper, config_i_pid);
       break;
 
@@ -781,13 +788,13 @@ void app_handle_estop_interrupt(void)
   chEvtSignalI(process_tp, (eventmask_t) 1);
 }
 
-static void read_estop_wait()
+static void read_estop_wait(void)
 {
   chThdSleepMilliseconds(ESTOP_DEBOUNCE_MS);
   estop = READ_ESTOP();
 }
 
-static int getStringPotValue()
+static int getStringPotValue(void)
 {
   return ADC_Value[7];
 }

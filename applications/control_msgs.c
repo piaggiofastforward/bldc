@@ -69,7 +69,9 @@ int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd)
       break;
     default:
       printf("Only prepared to handle speed and current commands\n");
+      return -1;
   }
+  return 0;
 }
 
 int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_union *status)
@@ -79,6 +81,7 @@ int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_un
     return -1;
   }
   memcpy(status->status_bytes, data + 1, sizeof(mc_status));
+  return 0;
 }
 
 
@@ -89,6 +92,7 @@ int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedbac
     return -1;
   }
   memcpy(fb->feedback_bytes, data + 1, sizeof(mc_feedback));
+  return 0;
 }
 
 int extractCurrentPIDData(const uint8_t* data, const unsigned int size, mc_config_current_pid_union *config)
@@ -98,6 +102,7 @@ int extractCurrentPIDData(const uint8_t* data, const unsigned int size, mc_confi
     return -1;
   }
   memcpy(config->config_bytes, data + 1, sizeof(mc_config_current_pid));
+  return 0;
 }
 
 void sendCurrentPIDData(packetSendFunc sendFunc, const mc_config_current_pid_union config)
