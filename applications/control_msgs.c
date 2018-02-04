@@ -4,6 +4,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+// all messages will come in as a struct plus a single mc_packet_type byte at the front,
+// with the expection of mc_cmd, which will have an additional mc_control_mode byte after the
+// mc_packet_type byte
+#define CMD_SIZE                sizeof(mc_cmd) + 2
+#define STATUS_SIZE             sizeof(mc_status) + 1
+#define FB_SIZE                 sizeof(mc_feedback) + 1
+#define CURRENT_PID_CONFIG_SIZE sizeof(mc_config_current_pid) + 1
+
 // Send the command with the specified sending function
 void sendCommand(packetSendFunc sendFunc, mc_cmd cmd)
 {
@@ -14,8 +22,7 @@ void sendCommand(packetSendFunc sendFunc, mc_cmd cmd)
    *
    *  Reserve space for the command, a byte for packet type, and a byte for control type 
    */
-  const int size = sizeof(cmd.target_cmd_i) + 2;
-  uint8_t data[size];
+  uint8_t data[CMD_SIZE];
   data[0] = CONTROL_WRITE;
   data[1] = (cmd.control_mode & 0xff);
   switch (cmd.control_mode)
@@ -27,7 +34,7 @@ void sendCommand(packetSendFunc sendFunc, mc_cmd cmd)
     default:
       printf("ERROR! Can only handle speed and current commands\n");
   }
-  sendFunc(data, size);
+  sendFunc(data, CMD_SIZE);
 }
 
 /**
@@ -37,7 +44,7 @@ void sendCommand(packetSendFunc sendFunc, mc_cmd cmd)
  */
 void sendStatusData(packetSendFunc sendFunc, const mc_status_union status)
 {
-  uint8_t data[sizeof(mc_status) + 1];
+  uint8_t data[STATUS_SIZE];
   data[0] = STATUS_DATA;
   memcpy(data + 1, status.status_bytes, sizeof(mc_status));
   sendFunc(data, sizeof(data));
@@ -45,7 +52,7 @@ void sendStatusData(packetSendFunc sendFunc, const mc_status_union status)
 
 void sendFeedbackData(packetSendFunc sendFunc, const mc_feedback_union fb)
 {
-  uint8_t data[sizeof(mc_feedback) + 1];
+  uint8_t data[FB_SIZE];
   data[0] = FEEDBACK_DATA;
   memcpy(data + 1, fb.feedback_bytes, sizeof(mc_feedback));
   sendFunc(data, sizeof(data));
@@ -55,7 +62,7 @@ void sendFeedbackData(packetSendFunc sendFunc, const mc_feedback_union fb)
 // Return -1 if this is not possible, and 0 otherwise
 int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd)
 {
-  if (data[0] != CONTROL_WRITE)
+  if (data[0] != CONTROL_WRITE || size != CMD_SIZE)
   {
     return -1;
   }
@@ -76,7 +83,7 @@ int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd)
 
 int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_union *status)
 {
-  if (data[0] != STATUS_DATA)
+  if (data[0] != STATUS_DATA || size != STATUS_SIZE)
   {
     return -1;
   }
@@ -87,7 +94,7 @@ int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_un
 
 int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedback_union *fb)
 {
-  if (data[0] != FEEDBACK_DATA)
+  if (data[0] != FEEDBACK_DATA || size != FB_SIZE)
   {
     return -1;
   }
@@ -97,7 +104,7 @@ int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedbac
 
 int extractCurrentPIDData(const uint8_t* data, const unsigned int size, mc_config_current_pid_union *config)
 {
-  if (data[0] != CONFIG_WRITE_CURRENT_PID)
+  if (data[0] != CONFIG_WRITE_CURRENT_PID || size != CURRENT_PID_CONFIG_SIZE)
   {
     return -1;
   }
@@ -107,7 +114,7 @@ int extractCurrentPIDData(const uint8_t* data, const unsigned int size, mc_confi
 
 void sendCurrentPIDData(packetSendFunc sendFunc, const mc_config_current_pid_union config)
 {
-  uint8_t data[sizeof(mc_config_current_pid) + 1];
+  uint8_t data[CURRENT_PID_CONFIG_SIZE];
   data[0] = CONFIG_WRITE_CURRENT_PID;
   memcpy(data + 1, config.config_bytes, sizeof(mc_config_current_pid));
   sendFunc(data, sizeof(data));
