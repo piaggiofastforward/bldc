@@ -1264,7 +1264,20 @@ void mcpwm_set_pid_current_parameters(float kp, float ki, float kd)
 
 void mcpwm_set_pid_current(float setpoint_amps)
 {
+	if (fabsf(setpoint_amps) < conf->cc_min_current) {
+		control_mode = CONTROL_MODE_NONE;
+		stop_pwm_ll();
+		return;
+	}
+
+	utils_truncate_number(&setpoint_amps, -conf->l_current_max, conf->l_current_max);
+
+	control_mode = CONTROL_MODE_CURRENT;
 	iq_pid.setpoint = setpoint_amps;
+
+	if (state != MC_STATE_RUNNING) {
+		set_duty_cycle_hl(SIGN(iq_pid.setpoint) * conf->l_min_duty);
+	}
 }
 
 static void run_pid_control_current(float dt) {
