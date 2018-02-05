@@ -5,9 +5,11 @@
 #include <string.h>
 
 // all messages will come in as a struct plus a single mc_packet_type byte at the front,
-// with the expection of mc_cmd, which will have an additional mc_control_mode byte after the
-// mc_packet_type byte
-#define CMD_SIZE                sizeof(mc_cmd) + 2
+// with the expection of mc_cmd -> for this, we will manually extract the target command from the
+// struct asw well as the control mode. The reason for this is that placing an enum inside a struct
+// produces various results on different architectures (in terms of size in bytes, memory layout,
+// etc) and we'd like to avoid all problems relating to those things!
+#define CMD_SIZE                6   // one integer field (4 bytes) + 1 packet type + 1 control mode
 #define STATUS_SIZE             sizeof(mc_status) + 1
 #define FB_SIZE                 sizeof(mc_feedback) + 1
 #define CURRENT_PID_CONFIG_SIZE sizeof(mc_config_current_pid) + 1
