@@ -151,6 +151,9 @@ static void startPubTaskCb(void* _);
  * main loop will be called at these rates. Therefore, these rates should be set slightly
  * below the desired write rate since there is a small latency between the time the flag
  * is set at the time at which the entire desired packet is sent out.
+ *
+ * NOTE - the feedback rate below is used as a fallback. By default, feedback will be sent to the
+ * host in response to a received command.
  */ 
 #define FB_RATE_MS     20  // 50Hz
 #define STATUS_RATE_MS 50  // 20Hz
@@ -322,9 +325,22 @@ static void process_packet(unsigned char *data, unsigned int len)
       break;
 
 		case CONTROL_WRITE:
-      extractCommand(data, len, &currentCommand);
-      commandReceived = true;
-      timeout_reset();
+      if (extractCommand(data, len, &currentCommand) == 0)
+      {
+        commandReceived = true;
+        timeout_reset();
+
+        /**
+           Sync up feedback with received commands - reset the timer so that we will only
+           write feedback as a result of the virtual timer if we dont receive a command
+           for at least FB_RATE_MS 
+        */
+        if (chVTIsArmed(&feedback_task_vt))
+          chVTReset(&feedback_task_vt);
+
+        shouldSendFeedback = true;
+        chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+      }
 			break;
 
 		case CONFIG_WRITE:
@@ -709,7 +725,8 @@ void setCommand()
       break;
     case CURRENT:
       echoCommand();
-      mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
+      mc_interface_set_pid_current((float)currentCommand.target_cmd_i / 1000.0);
+      // mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
       break;
     // case DUTY:
     //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;

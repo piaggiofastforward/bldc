@@ -1295,9 +1295,13 @@ static void run_pid_control_current(float dt) {
 
 	// Calculate output
 	float output = p_term + i_term + d_term;
-	utils_truncate_number(&output, -1.0, 1.0);
 
-	current_set = output * conf->lo_current_max;
+	if (output > conf->lo_current_max)
+		output = conf->lo_current_max;
+	else if (output < conf->lo_current_min)
+		output = conf->lo_current_min;
+
+	current_set = output;
 }
 
 static THD_FUNCTION(rpm_thread, arg) {

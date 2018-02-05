@@ -411,6 +411,14 @@ void mc_interface_set_pid_current_parameters(float kp, float ki, float kd) {
 	mcpwm_set_pid_current_parameters(kp, ki, kd);
 }
 
+void mc_interface_set_pid_current(float setpoint_amps)
+{
+	// only intended for use with PFF BLDC operation
+	if (m_conf.motor_type != MOTOR_TYPE_BLDC)
+		return;
+	mcpwm_set_pid_current(setpoint_amps);
+}
+
 void mc_interface_set_current(float current) {
 	if (mc_interface_try_input()) {
 		return;
