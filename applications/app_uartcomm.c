@@ -66,13 +66,7 @@ static unsigned int serial_rx_write_pos = 0;
 static uint8_t uart_receive_buffer[MAX_BYTES_PER_READ];
 static int is_running = 0;
 
-/**
- * Functions that work with the packet interface, which conveniently wraps a raw data buffer in
- * a start byte, packet length, 2 CRC, and stop bytes.
- */
-static void process_packet(unsigned char *data, unsigned int len);
-static void send_packet_wrapper(unsigned char *data, unsigned int len);
-static void send_packet(unsigned char *data, unsigned int len);
+
 
 
 // state variables
@@ -81,13 +75,25 @@ volatile bool commandReceived      = false;
 volatile bool updateConfigReceived = false;
 volatile bool commitConfigReceived = false;
 static volatile bool estop = true;
-static volatile bool rev_limit = false;
-static volatile bool fwd_limit = false;
-static volatile int32_t min_tacho = INT_MAX;
-static volatile int32_t max_tacho = INT_MIN;
 
 /**
- * Structs to hold various transaction data.
+ * State variables for coordinating characters received through rxChar() and through uartStartReceive(),
+ * to ensure that we process bytes in the actual order that we received them.
+ */ 
+
+// might need to change this later for REALLY BIG packets (ie: packets larger than 255)
+static volatile uint8_t packetLength = 0;
+static volatile bool startByteReceived = false;
+static volatile bool packetLengthReceived = false;
+
+// set this to true after calling uartStartReceive(), set back to false in rxEnd()
+static volatile bool uartReceiving = false;
+
+// this will be set through ext_handler in response to an interrupt on the estop pin
+static volatile bool shouldReadEstop = false;
+
+/**
+ * Structs to hold various transaction and state data.
  */
 static volatile mc_feedback_union fb;
 static volatile mc_status_union status;
@@ -106,13 +112,6 @@ static void setCommand(void);
 static void sendConfigCommitConfirmation(void);
 static int getStringPotValue(void);
 volatile float *getParamPtr(enum mc_config_param param);
-int32_t descale_position(float pos);
-// bool shouldMove(void);
-void homing_sequence(void);
-// void toggle_estop(EXTDriver *extp, expchannel_t channel); 
-// void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel);
-// void toggle_rev_limit(EXTDriver *extp, expchannel_t channel);
-
 
 /**
  * Use timer interrupts to trigger status and feedback publishing at specified intervals. Set flags in the
@@ -121,7 +120,6 @@ void homing_sequence(void);
 static virtual_timer_t feedback_task_vt;
 static virtual_timer_t status_task_vt;
 #define isPublishing() (chVTIsArmedI(&feedback_task_vt) || chVTIsArmedI(&status_task_vt))
-
 static void feedbackTaskCb(void* _);
 static void statusTaskCb(void* _);
 void updateFeedback(void);
@@ -132,7 +130,7 @@ void updateStatus(void);
  *  then read the pin.
  */
 #define ESTOP_DEBOUNCE_MS 15  // PLENTY
-static void read_estop_wait();
+static void read_estop_wait(void);
 /**
  *  Enable/disable the virtual timer interrupts that prompt us to send feedback/status data. This 
  *  will be used when we get an FOC detection request.
@@ -161,29 +159,12 @@ volatile bool shouldSendStatus   = false;
 volatile bool shouldSendFeedback = false;
 
 /**
- *  Define a timer task to get the absolute encoder ticks at a predefined rate
+ * Functions that work with the packet interface, which conveniently wraps a raw data buffer in
+ * a start byte, packet length, 2 CRC, and stop bytes.
  */
-#define GET_ENC_TICKS_RATE_MS 5
-static virtual_timer_t get_encoder_ticks_task;
-static volatile enc_abs_count_t encoder_abs_ticks = 0;
-static volatile bool shouldReadEncTicks = false;
-static void getTicksCb(void* _);
-
-/**
- * State variables for coordinating cahracters received through rxChar() and through uartStartReceive(),
- * to ensure that we process bytes in the actual order that we received them.
- */ 
-
-// might need to change this later for REALLY BIG packets (ie: packets larger than 255)
-static volatile uint8_t packetLength = 0;
-static volatile bool startByteReceived = false;
-static volatile bool packetLengthReceived = false;
-
-// set this to true after calling uartStartReceive(), set back to false in rxEnd()
-static volatile bool uartReceiving = false;
-
-// this will be set through ext_handler in response to an interrupt on the estop pin
-static volatile bool shouldReadEstop = false;
+static void process_packet(unsigned char *data, unsigned int len);
+static void send_packet_wrapper(unsigned char *data, unsigned int len);
+static void send_packet(unsigned char *data, unsigned int len);
 
 /**
  * For testing purposes!
@@ -191,17 +172,6 @@ static volatile bool shouldReadEstop = false;
 void echoCommand(void);
 void confirmationEcho(void);
 
-/**
- * Each pin can have at most one interrupt across GPIO sets.
- * Each index maps to a pin.
- *
- * ESTOP     -> PC5 (pin 8)
- * FWD_LIMIT -> PA5 (pin 21)
- * REV_LIMIT -> PA6 (pin 22)
- *
- * Pass the GPIO base (eg. GPIO_A) as the first argument to underlying EXTChannelConfig
- * struct, and the index in this EXTConfig instance represents the pin index.
- */
 
 // limit switches are probably going to be removed, and estop pin definitions have moved to hw60.h
 // #define ESTOP_PIN_INDEX  5
@@ -209,6 +179,10 @@ void confirmationEcho(void);
 #define REVLIM_PIN_INDEX 4
 #define FWDLIM_PORT      GPIOA
 #define REVLIM_PORT      GPIOA
+
+/**
+                        Function Definitions
+*/
 
 /*
  * This callback is invoked when a transmission buffer has been completely
@@ -335,6 +309,15 @@ static void process_packet(unsigned char *data, unsigned int len)
 
     case CONFIG_WRITE_CURRENT_PID:
       extractCurrentPIDDataF(config_i_pid, data);
+
+      // should we do something to stop motor operation or something???
+      mc_interface_set_pid_current_parameters(
+        config_i_pid.config.kp,
+        config_i_pid.config.ki,
+        config_i_pid.config.kd
+      );
+
+      // optionally echo it back to the driver
       sendCurrentPIDData(send_packet_wrapper, config_i_pid);
       break;
 
@@ -438,8 +421,6 @@ static void initHardware()
   palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
 
   estop     = READ_ESTOP();
-  rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
-  fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
   configureEXT();
   set_estop_callback(app_handle_estop_interrupt);
 }
@@ -455,8 +436,6 @@ void app_uartcomm_start(void)
   #if APP_USE_ENCODER
     encoder_init_abi(mcconf.m_encoder_counts);
   #endif
-  /* (void) getStringPotValue; */
-  // mc_interface_set_pid_pos_src(getStringPotValue);
 
 	is_running = 1;
 
@@ -503,10 +482,8 @@ static THD_FUNCTION(packet_process_thread, arg)
   chVTObjectInit(&start_pub_task_vt);
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
-  // chVTObjectInit(&get_encoder_ticks_task);
   chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
   chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
-  // chVTSet(&get_encoder_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
 
 	while (1)
 	{
@@ -703,17 +680,6 @@ static void statusTaskCb(void* _)
   chSysUnlockFromISR();
 }
 
-static void getTicksCb(void* _)
-{
-	(void) _;
-	shouldReadEncTicks = true;
-	chSysLockFromISR();
-	encoder_abs_ticks = encoder_abs_count();
-  chVTSetI(&get_encoder_ticks_task, MS2ST(GET_ENC_TICKS_RATE_MS), getTicksCb, NULL);
-  chEvtSignalI(process_tp, (eventmask_t) 1);
-  chSysUnlockFromISR();
-}
-
 /*
  * Updates the feedback struct with current data
  */ 
@@ -731,7 +697,7 @@ void updateStatus(void)
 {
   status.status.fault_code = mc_interface_get_fault();
   status.status.temp       = NTC_TEMP(ADC_IND_TEMP_MOS);
-  status.status.limits_set = min_tacho != INT_MAX && max_tacho != INT_MIN;
+  status.status.limits_set = 0;
 }
 
 void setCommand()
@@ -822,126 +788,13 @@ void app_handle_estop_interrupt(void)
   chEvtSignalI(process_tp, (eventmask_t) 1);
 }
 
-static void read_estop_wait()
+static void read_estop_wait(void)
 {
   chThdSleepMilliseconds(ESTOP_DEBOUNCE_MS);
   estop = READ_ESTOP();
 }
 
-/*
- * Returns the absolute position in ticks based on the min and max limits
- * pos should be between -1 and 1
- */
-int32_t descale_position(float pos)
-{
-    int32_t offset = (max_tacho - min_tacho) * pos / 2;
-    int32_t center = (max_tacho + min_tacho) / 2;
-    return center + offset;
-}
-
-/*
- * A state machine to determine the limits of position control using limit switches
- *
- * TODO: Make current control value configurable
- */
-void homing_sequence(void) 
-{
-  if (max_tacho == INT_MIN) {
-    if (!fwd_limit) {
-      mc_interface_set_current(8);
-    } 
-  } else if (min_tacho == INT_MAX) {
-    if (!rev_limit) {
-      mc_interface_set_current(-8);
-    }
-  }
-}
-
-/*
- * Returns true if the limit switch is not set in the desired direction
-//  */
-// bool shouldMove(void) 
-// {
-//   bool isForward = true;
-//   switch (currentCommand.control_mode) {
-//     case POSITION:
-//       isForward = currentCommand.target_cmd_i - mc_interface_get_tachometer_value(false) > 0;
-//       break;
-//     case SCALE_POS:
-//       isForward = descale_position(currentCommand.target_cmd_f / 1000.0f) > 0 - 
-//         mc_interface_get_tachometer_value(false);
-//       break;
-//     case SPEED:
-//       isForward = currentCommand.target_cmd_i > 0;
-//       break;
-//     case HOMING:
-//       if (max_tacho == INT_MIN) {
-//         isForward = true;
-//       } else if (min_tacho == INT_MAX) {
-//         isForward = false;
-//       }
-//     case CURRENT:
-//     case DUTY:
-//       isForward = currentCommand.target_cmd_f > 0;
-//       break;
-//   }
-
-//   // Return false if the limit switch for the current direction is triggered
-//   return !(isForward ? fwd_limit : rev_limit);
-// }
-
-// /*
-//  * Reads the estop value and disables control if it is set
-//  * Called from interrupt context on both edges
-//  * Pulldown input, so unless externally pulled up, default value is PAL_LOW
-//  */
-// void toggle_estop(EXTDriver *extp, expchannel_t channel) 
-// {
-//   (void) extp;
-//   (void) channel;
-//   estop = palReadPad(ESTOP_PORT, ESTOP_PIN_INDEX) == PAL_LOW;
-//   // if (estop) {
-//   //   mc_interface_set_brake_current(0);
-//   // }
-// }
-
-// /*
-//  * Reads the forward limit switch. If set and trying to move forward, brake
-//  * Sets the max_tacho limit
-//  * Called from interrupt context on both edges
-//  */
-// void toggle_fwd_limit(EXTDriver *extp, expchannel_t channel) 
-// {
-//   (void) extp;
-//   (void) channel;
-//   fwd_limit = palReadPad(FWDLIM_PORT, FWDLIM_PIN_INDEX) == PAL_LOW;
-//   if (fwd_limit) {
-//     if (!shouldMove()) {
-//       // mc_interface_brake_now();
-//     }
-//     max_tacho = mc_interface_get_tachometer_value(false);
-//   }
-// }
-
-// /*
-//  * Reads the reverse limit switch. If set and trying to move backwards, brake
-//  * Sets the min_tacho limit
-//  * Called from interrupt context on both edges
-//  */
-// void toggle_rev_limit(EXTDriver *extp, expchannel_t channel) 
-// {
-//   (void) extp;
-//   (void) channel;
-//   rev_limit = palReadPad(REVLIM_PORT, REVLIM_PIN_INDEX) == PAL_LOW;
-//   if (rev_limit) {
-//     if (!shouldMove()) {
-//       // mc_interface_brake_now();
-//     }
-//     min_tacho = mc_interface_get_tachometer_value(false);
-//   }
-// }
-
-static int getStringPotValue()
+static int getStringPotValue(void)
 {
   return ADC_Value[7];
 }
