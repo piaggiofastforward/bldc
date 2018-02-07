@@ -1288,6 +1288,7 @@ void mcpwm_set_pid_current(float setpoint_amps)
 static void run_pid_control_current(float dt) {
 	static float i_term = 0;
 	static float prev_error = 0;
+	static float err_sum = 0;
 	float p_term;
 	float d_term;
 
@@ -1303,7 +1304,8 @@ static void run_pid_control_current(float dt) {
 
 	// Compute parameters
 	p_term = error * iq_pid.kp;
-	i_term += error * (iq_pid.ki * dt);
+	err_sum += error * dt;
+	i_term = iq_pid.ki * err_sum;
 	d_term = (error - prev_error) * (iq_pid.kd / dt);
 
 	// I-term wind-up protection
