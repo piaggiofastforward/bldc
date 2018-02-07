@@ -40,7 +40,6 @@
 #include "encoder.h"
 
 // Settings
-#define BAUDRATE					115200
 #define PACKET_HANDLER				1
 #define SERIAL_RX_BUFFER_SIZE		128
 #define MAX_BYTES_PER_READ      128
@@ -67,10 +66,7 @@ static uint8_t uart_receive_buffer[MAX_BYTES_PER_READ];
 static int is_running = 0;
 
 
-
-
 // state variables
-volatile bool rxEndReceived        = false;
 volatile bool commandReceived      = false;
 volatile bool updateConfigReceived = false;
 volatile bool commitConfigReceived = false;
@@ -244,12 +240,14 @@ static void rxchar(UARTDriver *uartp, uint16_t c)
   }
 
   // store the packetLength, accounting for 2 CRC bytes and a stop byte
-  if (startByteReceived)
+  if (startByteReceived && !packetLengthReceived)
   {
     packetLength = c;
     packetLength += 3;
     packetLengthReceived = true;
     startByteReceived = false;
+    uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
+    uartReceiving = true;
   }
 
 	if (serial_rx_write_pos == SERIAL_RX_BUFFER_SIZE) {
@@ -268,8 +266,25 @@ static void rxchar(UARTDriver *uartp, uint16_t c)
 static void rxend(UARTDriver *uartp)
 {
 	(void)uartp;
-	rxEndReceived = true;
   chSysLockFromISR();
+
+  /*
+   *  Copy received bytes from the uart_receive_buffer into the general serial_buffer
+   *  so that processing of bytes received through rxchar() and rxend() happen in the 
+   *  correct order
+   */
+  int i = 0;
+  while (i < packetLength)
+  {
+    serial_rx_buffer[serial_rx_write_pos++] = uart_receive_buffer[i];
+    if (serial_rx_write_pos == SERIAL_RX_BUFFER_SIZE) {
+      serial_rx_write_pos = 0;
+    }
+    i++;
+  }
+  packetLengthReceived = false;
+  startByteReceived = false;
+  uartReceiving = false;
   chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
@@ -283,7 +298,7 @@ static UARTConfig uart_cfg = {
 		rxend,
 		rxchar,
 		rxerr,
-		BAUDRATE,
+		APP_UART_BAUD,
 		0,
 		USART_CR2_LINEN,
 		0
@@ -485,9 +500,7 @@ void app_uartcomm_configure(uint32_t baudrate)
 static THD_FUNCTION(packet_process_thread, arg)
 {
 	(void)arg;
-
 	chRegSetThreadName("uartcomm process");
-
 	process_tp = chThdGetSelfX();
 
   /**
@@ -515,18 +528,19 @@ static THD_FUNCTION(packet_process_thread, arg)
      * We can receive data in 2 ways:
      * 
      * 1) Through the rxChar() interrupt above. This will be called when we receive a character
-     *    but the application wasnt ready for it. In this case, we want to prepare the UARTDriver
-     *    object to correctly receive the rest of the packet (as opposed to interrupting and calling rxChar() on
-     *    every single received character), placing all the data in the uart_receive_buffer.
+     *    but the application wasnt ready for it. Generally, this will occur on the first two bytes of an RX
+     *    transaction - we need to receive the start byte as well as the packet length (so we know how many bytes
+     *    to receive through the call to uartStartReceive()).
      *
      * 2) Through calls to uartReceive(). This will ensure a "proper" receiving of data - 
-     *    the rxchar() callback will not be invoked. Instead, rxEnd() will be invoked when the number of bytes
-     *    specified in the call to uartStartReceive() is reached.
+     *    the rxchar() callback will not be invoked with every incoming byte. Instead, rxEnd() will be invoked
+     *    when the number of bytes specified in the call to uartStartReceive() is reached. In general, the number
+     *    of specified bytes to receive will be equivalent to the number of bytes left to receive in the packet.
+     *    Thus, rxend() should generally be invoked once the last byte of an incoming transaction is received.
      *
      *  "uartReceiving" will be set to true just after uartStartReceive() is called, and will be set back to false after
-     *  all of the bytes received in the uart_receive_buffer are processed via packet_process_byte(). This guards against
-     *  the condition where, at high command speeds, we process a byte received through rxChar() before processing all
-     *  of the bytes received through uartStartReceive(). 
+     *  all of the bytes received in the uart_receive_buffer are placed into the serial_rx_buffer. This ensures bytes
+     *  received in both of the two above ways are processed correctly.
      */
 
     while (!uartReceiving && (serial_rx_read_pos != serial_rx_write_pos))
@@ -544,33 +558,6 @@ static THD_FUNCTION(packet_process_thread, arg)
     }
 
     /**
-     * Handle the case where the uartStartReceive function returned (ie: the MAX_BYTES_PER_READ)
-     * was met) make sure we first process the bytes received from rxChar() (while statement above)
-     * and then process all of these bytes so that we call packet_process_byte() in the correct sequence.
-     */
-
-    if (rxEndReceived)
-    {
-      for (int i = 0; i < packetLength; i++)
-      {
-        packet_process_byte(uart_receive_buffer[i], PACKET_HANDLER);
-      }
-      rxEndReceived = false;
-      uartReceiving = false;
-    }
-
-    /**
-     * If we received the packetLength, use uartStartReceive() to receive the rest of the bytes. When
-     * the specified number of bytes is read, rxEnd() will be invoked, setting rxEndReceived = true
-     */
-    if (packetLengthReceived)
-    {
-      uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
-      uartReceiving = true;
-      packetLengthReceived = false;
-    }
-
-    /**
      * These flags will be set in timer interrupts at rates configurable via FB_RATE_MS and STATUS_RATE_MS
      */
 		if (shouldSendFeedback)
@@ -585,16 +572,6 @@ static THD_FUNCTION(packet_process_thread, arg)
       sendStatusData(send_packet_wrapper, status);
       shouldSendStatus = false;
     }
-
-    
-    /**
-     *  This can probably be removed since we wont be using optical encoders with limit switches, we will be
-     * transitioning to an absolute magnetic position sensor
-     */
-		// else if (!shouldMove())
-		// {
-		// 	// mc_interface_brake_now();
-		// }
 
     // don't give commands unless the estop is not pressed down
     if (commandReceived && !estop)
@@ -725,8 +702,8 @@ void setCommand()
       break;
     case CURRENT:
       echoCommand();
-      mc_interface_set_pid_current((float)currentCommand.target_cmd_i / 1000.0);
-      // mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
+      // mc_interface_set_pid_current((float)currentCommand.target_cmd_i / 1000.0);
+      mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
       break;
     // case DUTY:
     //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;

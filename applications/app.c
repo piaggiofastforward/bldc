@@ -31,8 +31,6 @@ const app_configuration* app_get_configuration(void) {
 	return &appconf;
 }
 
-static unsigned int UART_BAUD = 230400;
-
 /**
  * Reconfigure and restart all apps. Some apps don't have any configuration options.
  *
@@ -105,7 +103,7 @@ void app_set_configuration(app_configuration *conf) {
 
 	app_ppm_configure(&appconf.app_ppm_conf);
 	app_adc_configure(&appconf.app_adc_conf);
-	app_uartcomm_configure(UART_BAUD);
+	app_uartcomm_configure(APP_UART_BAUD);
 	app_nunchuk_configure(&appconf.app_chuk_conf);
 
 #ifdef APP_CUSTOM_TO_USE
