@@ -684,6 +684,7 @@ void updateFeedback(void)
   fb.feedback.measured_position = encoder_abs_count();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
+  fb.feedback.last_pid_current_output = mc_interface_get_last_pid_current_output(); 
   fb.feedback.switch_flags      = estop;
 }
 
@@ -703,8 +704,8 @@ void setCommand()
       break;
     case CURRENT:
       echoCommand();
-      // mc_interface_set_pid_current((float)currentCommand.target_cmd_i / 1000.0);
-      mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
+      mc_interface_set_pid_current((float)currentCommand.target_cmd_i / 1000.0);
+      // mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
       break;
     // case DUTY:
     //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;

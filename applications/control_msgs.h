@@ -231,6 +231,7 @@ typedef struct {
   uint32_t measured_position;
   float supply_voltage;
   float supply_current;
+  float last_pid_current_output;
   uint32_t switch_flags;
 } mc_feedback;
 

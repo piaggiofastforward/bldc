@@ -1262,6 +1262,11 @@ void mcpwm_set_pid_current_parameters(float kp, float ki, float kd)
 	control_mode = CONTROL_MODE_CURRENT;
 }
 
+float mcpwm_get_last_pid_current_output(void)
+{
+	return iq_pid.last_output;
+}
+
 void mcpwm_set_pid_current(float setpoint_amps)
 {
 	if (fabsf(setpoint_amps) < conf->cc_min_current) {
@@ -1293,7 +1298,8 @@ static void run_pid_control_current(float dt) {
 		return;
 	}
 	// Compute error
-	float error = iq_pid.setpoint - mcpwm_get_tot_current();
+	float current_nofilter = mcpwm_get_tot_current();
+	float error = iq_pid.setpoint - (direction ? current_nofilter : -current_nofilter);
 
 	// Compute parameters
 	p_term = error * iq_pid.kp;
@@ -1314,6 +1320,7 @@ static void run_pid_control_current(float dt) {
 	else if (output < conf->lo_current_min)
 		output = conf->lo_current_min;
 
+	iq_pid.last_output = output;
 	current_set = output;
 }
 
@@ -1374,7 +1381,6 @@ static THD_FUNCTION(rpm_thread, arg) {
 		rpm_dep.comm_time_sum_min_rpm = conf->m_bldc_f_sw_max / ((conf->sl_min_erpm / 60.0) * 6.0);
 
 		run_pid_control_speed();
-
 
 		// the encoder absolute counts will be updated as a result of run_pid_control_pos,
 		// so only do it here if necessary
@@ -2140,7 +2146,8 @@ void mcpwm_adc_int_handler(void *p, uint32_t flags) {
 	mc_interface_mc_timer_isr();
 
 	if (encoder_is_configured()) {
-		run_pid_control_pos(1.0 / switching_frequency_now);
+		// run_pid_control_pos(1.0 / switching_frequency_now);
+		run_pid_control_current(1.0 / switching_frequency_now);
 	}
 
 	last_adc_isr_duration = (float)TIM12->CNT / 10000000.0;

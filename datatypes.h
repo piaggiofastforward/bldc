@@ -130,7 +130,8 @@ typedef struct {
 	float kp;
 	float ki;
 	float kd;
-	float setpoint; // the goal current to achieve, in amps
+	float setpoint;    // the goal current to achieve, in amps
+	float last_output; // the output current of the last iteration of the algorithm
 } mc_current_pid_configuration;
 
 typedef struct {

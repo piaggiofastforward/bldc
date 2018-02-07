@@ -69,6 +69,7 @@ void mcpwm_switch_comm_mode(mc_comm_mode next);
 
 void mcpwm_set_pid_current_parameters(float kp, float ki, float kd);
 void mcpwm_set_pid_current(float amps);
+float mcpwm_get_last_pid_current_output(void);
 
 // Interrupt handlers
 void mcpwm_adc_inj_int_handler(void);
