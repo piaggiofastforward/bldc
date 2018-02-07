@@ -31,7 +31,7 @@ static THD_WORKING_AREA(timeout_thread_wa, 512);
 static THD_FUNCTION(timeout_thread, arg);
 
 void timeout_init(void) {
-	timeout_msec = 1000;
+	timeout_msec = 500;
 	last_update_time = 0;
 	timeout_brake_current = 0.0;
 	has_timeout = false;
@@ -67,8 +67,7 @@ static THD_FUNCTION(timeout_thread, arg) {
 
 	for(;;) {
 		if (timeout_msec != 0 && chVTTimeElapsedSinceX(last_update_time) > MS2ST(timeout_msec)) {
-			mc_interface_unlock();
-			mc_interface_set_brake_current(timeout_brake_current);
+      mc_interface_handle_timeout(timeout_brake_current);
 			has_timeout = true;
 		} else {
 			has_timeout = false;

@@ -403,6 +403,24 @@ void mc_interface_set_pid_pos_src(int (*pos_src)(void)) {
   mcpwm_foc_set_pid_pos_src(pos_src);
 }
 
+void mc_interface_handle_timeout(float timeout_brake_current) {
+	mc_interface_unlock();
+
+	switch(m_conf.motor_type) {
+
+		// handling for our own current pid loop
+		case MOTOR_TYPE_BLDC:
+			mcpwm_set_pid_current(0.0);
+			break;
+
+		default:
+			break;
+	}
+
+	// default behavior
+	mc_interface_set_brake_current(timeout_brake_current);
+}
+
 void mc_interface_set_pid_current_parameters(float kp, float ki, float kd) {
 
 	// only intended for use with PFF BLDC operation
@@ -423,7 +441,7 @@ float mc_interface_get_last_pid_current_output(void)
 {
 	// only intended for use with PFF BLDC operation
 	if (m_conf.motor_type != MOTOR_TYPE_BLDC)
-		return;
+		return -1.12412123123;
 	return mcpwm_get_last_pid_current_output();
 }
 
