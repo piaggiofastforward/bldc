@@ -7,7 +7,7 @@
 */
 static EstopHandlerFunc estop_handler = NULL;
 
-void configureEXT()
+void configure_EXT(void)
 {
   EXTI_InitTypeDef EXTI_InitStructure;
 
@@ -30,7 +30,7 @@ void set_estop_callback(EstopHandlerFunc f)
   estop_handler = f;
 }
 
-void estop_state_change_handler()
+void estop_state_change_handler(void)
 {
   if (estop_handler != NULL)
     estop_handler();

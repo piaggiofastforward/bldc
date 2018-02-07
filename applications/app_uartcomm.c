@@ -38,6 +38,7 @@
 #include "timeout.h"       // timeout_reset()
 #include "uart_mc_config.h"
 #include "encoder.h"
+#include "ext_handler.h"
 
 // Settings
 #define PACKET_HANDLER				1
@@ -452,7 +453,7 @@ static void initHardware()
   palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
 
   estop     = READ_ESTOP();
-  configureEXT();
+  configure_EXT();
   set_estop_callback(app_handle_estop_interrupt);
 }
 
