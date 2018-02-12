@@ -130,7 +130,7 @@ static virtual_timer_t hall_task_vt;
 #define HALL_READ_RATE_MS 100
 #define HALL_PACKET_HEADER 47
 #define HALL_PACKET_FOOTER 48
-static uint8_t hall_data[3] = {};
+static uint8_t hall_data_and_current_readings[7] = {};
 static bool shouldSendHallData = false;
 
 static void hallReadCb(void* _);
@@ -681,9 +681,11 @@ static void hallReadCb(void* _)
   (void)_;
   chSysLockFromISR();
 
-  hall_data[0] = READ_HALL1();
-  hall_data[1] = READ_HALL2();
-  hall_data[2] = READ_HALL3();
+  hall_data_and_current_readings[0] = READ_HALL1();
+  hall_data_and_current_readings[1] = READ_HALL2();
+  hall_data_and_current_readings[2] = READ_HALL3();
+  float current = mc_interface_get_tot_current();
+  memcpy(hall_data_and_current_readings + 3, &current, sizeof(float));
 
   chVTSetI(&hall_task_vt, MS2ST(HALL_READ_RATE_MS), hallReadCb, NULL);
   shouldSendHallData = true;
@@ -693,14 +695,11 @@ static void hallReadCb(void* _)
 
 void sendHallData()
 {
-  uint8_t data[5] = {
-    HALL_PACKET_HEADER,
-    hall_data[0],
-    hall_data[1],
-    hall_data[2],
-    HALL_PACKET_FOOTER,
-  };
-  send_packet_wrapper(data, 5);
+  uint8_t data[9] = {};
+  data[0] = HALL_PACKET_HEADER;
+  memcpy(data + 1, hall_data_and_current_readings, sizeof(hall_data_and_current_readings));
+  data[8] = HALL_PACKET_FOOTER;
+  send_packet_wrapper(data, 9);
 }
 
 /**
