@@ -127,7 +127,7 @@ static virtual_timer_t status_task_vt;
  *  over UART.
  */
 static virtual_timer_t hall_task_vt;
-#define HALL_READ_RATE_MS 100
+#define HALL_READ_RATE_MS 20
 #define HALL_PACKET_HEADER 47
 #define HALL_PACKET_FOOTER 48
 static uint8_t hall_data_and_current_readings[7] = {};

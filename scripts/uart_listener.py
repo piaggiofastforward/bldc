@@ -111,13 +111,14 @@ class Listener(object):
         ser = serial.Serial(self.port, BAUD, timeout=TIMEOUT)
 
         # continually loop and read the values being sent to us over UART. write to stdout
-        f = lambda: ser.read_until(b'\x30')
+        get_start = lambda: ser.read_until(b'\x30')
+        get_end = lambda: ser.read_until(b'\x2f')
         while (1):
-            data = f()
+            data = get_start()
 
             # in case there happens to be multiple end bytes within the payload itself
             while len(data) < PACKET_LENGTH:
-                data += f()
+                data += get_end()
 
             #use ord() to convert the bytes to integers
             self.publish_all([ord(d) for d in data])
