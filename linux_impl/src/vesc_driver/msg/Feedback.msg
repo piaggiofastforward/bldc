@@ -4,7 +4,6 @@ int32 measured_velocity
 int32 measured_position
 float32 supply_voltage
 float32 supply_current
-float32 last_pid_current_output
 
 
 # use logical AND on the switch flags eg. switch_flag = 5 means that both

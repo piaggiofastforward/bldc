@@ -5,7 +5,6 @@
 #include "vesc_driver/Status.h"
 #include "vesc_driver/datatypes.h"
 #include "vesc_driver/Command.h"
-#include "vesc_driver/DynamicReconfigure.h"
 #include "ros/ros.h"
 
 extern "C" {
@@ -34,11 +33,10 @@ class RosHandler
 {
 public:
   RosHandler(const char* feedback_topic, const char* status_topic,
-  	const char* command_topic, const char* dyn_reconfig_topic, bool is_drive_motor, 
+  	const char* command_topic, bool is_drive_motor, 
     ros::NodeHandle *nh);
 
   void commandCallback(const vesc_driver::Command::ConstPtr &msg);
-  void reconfigCallback(const vesc_driver::DynamicReconfigure::ConstPtr& msg);
   void publishFeedback();
   void publishStatus();
 
@@ -49,7 +47,6 @@ private:
 
 #ifdef PLATFORM_IS_LINUX
   ros::Subscriber command_sub_;
-  ros::Subscriber dyn_reconfig_sub_;
 #else
   ros::Subscriber<vesc_driver::Command, RosHandler> command_sub_;
 #endif

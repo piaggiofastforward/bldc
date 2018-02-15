@@ -9,7 +9,6 @@ find_package(catkin REQUIRED COMPONENTS
   serial
   std_msgs
   roslib
-  dynamic_reconfigure
   message_generation
 )
 
@@ -46,17 +45,12 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * uncomment the generate_messages entry below
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
-generate_dynamic_reconfigure_options(
-  cfg/vescDriver.cfg
-)
-
 ## Generate messages in the 'msg' folder
 add_message_files(
   FILES
   Command.msg
   Feedback.msg
   Status.msg
-  DynamicReconfigure.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -139,9 +133,6 @@ include_directories(
 add_definitions(-std=c++11)
 add_definitions(-DPLATFORM_IS_LINUX)
 
-add_executable(dynamic_reconfig_${PROJECT_NAME} src/dyn_reconfig.cpp)
-add_dependencies(dynamic_reconfig_${PROJECT_NAME} vesc_driver_generate_messages_cpp ${PROJECT_NAME}_gencfg)
-target_link_libraries(dynamic_reconfig_${PROJECT_NAME} ${catkin_LIBRARIES})
 
 ## Declare a C++ executable
 add_executable(

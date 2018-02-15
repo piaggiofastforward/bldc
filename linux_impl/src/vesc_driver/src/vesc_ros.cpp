@@ -33,7 +33,7 @@ static volatile int statusBufWriteIndex = 0;
 static volatile int statusBufReadIndex = 0;
 
 RosHandler::RosHandler(const char* feedback_topic, const char* status_topic,
-    const char* command_topic, const char* dyn_reconfig_topic, bool is_drive_motor, 
+    const char* command_topic, bool is_drive_motor, 
     ros::NodeHandle *nh
 )
   : is_drive_motor_(is_drive_motor)
@@ -52,7 +52,6 @@ RosHandler::RosHandler(const char* feedback_topic, const char* status_topic,
   feedback_pub_ = nh->advertise<vesc_driver::Feedback>(feedback_topic, 1);
   status_pub_ = nh->advertise<vesc_driver::Status>(status_topic, 1);
   command_sub_ = nh->subscribe(command_topic, 1, &RosHandler::commandCallback, this);
-  dyn_reconfig_sub_ = nh->subscribe(dyn_reconfig_topic, 1, &RosHandler::reconfigCallback, this);
 }
 #endif
 
@@ -70,17 +69,6 @@ void RosHandler::commandCallback(const vesc_driver::Command::ConstPtr &msg)
   cmd.control_mode = CURRENT;
   cmd.target_cmd_i = msg->target_cmd;
   sendCommand(sendPacket, cmd);
-}
-
-void RosHandler::reconfigCallback(const vesc_driver::DynamicReconfigure::ConstPtr& msg)
-{
-  ROS_WARN_STREAM("got reconfig callback: kp = " << msg->kp.data << ", ki = " << msg->ki.data << 
-    ", kd = " << msg->kd.data);
-  mc_config_current_pid_union cc;
-  cc.config.kp = msg->kp.data;
-  cc.config.ki = msg->ki.data;
-  cc.config.kd = msg->kd.data;
-  sendCurrentPIDData(sendPacket, cc);
 }
 
 /**
@@ -115,7 +103,6 @@ void processFeedback(const mc_feedback &fb)
   msg.supply_voltage          = fb.supply_voltage;
   msg.supply_current          = fb.supply_current;
   msg.switch_flags            = fb.switch_flags;
-  msg.last_pid_current_output = fb.last_pid_current_output;
 
   feedback_to_publish[fbBufWriteIndex] = msg;
   fbBufWriteIndex = (fbBufWriteIndex + 1) % FEEDBACK_BUF_SIZE;

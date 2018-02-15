@@ -20,10 +20,8 @@ int main(int argc, char** argv)
   std::string status_topic;
   std::string cmd_topic;
   std::string config_file;
-  std::string dynamic_reconfig_topic;
   bool is_drive_motor;
   nh.param<std::string>("port", port, port);
-  nh.param<std::string>("dynamic_reconfig_topic", dynamic_reconfig_topic, dynamic_reconfig_topic);
   nh.param<std::string>("feedback_topic", fb_topic, fb_topic);
   nh.param<std::string>("status_topic", status_topic, status_topic);
   nh.param<std::string>("cmd_topic", cmd_topic, cmd_topic);
@@ -31,7 +29,7 @@ int main(int argc, char** argv)
   nh.param<std::string>("config_file", config_file, config_file);
 
   vesc::RosHandler ros_handler(
-    fb_topic.c_str(), status_topic.c_str(), cmd_topic.c_str(), dynamic_reconfig_topic.c_str(), is_drive_motor, &nh
+    fb_topic.c_str(), status_topic.c_str(), cmd_topic.c_str(), is_drive_motor, &nh
   );
 
   // initialize vesc communication
