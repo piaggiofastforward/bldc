@@ -1,0 +1,17 @@
+
+
+TODO for VESC:
+
+important:
+- rectify usage of encoder angles vs encoder ticks for pid loop (speed and position)
+- develop UART position control
+- test encoder as position control source
+- test encoder as speed control source
+- develop torque control (via current feedback)
+   - this loop will be run on the linux side, right? so we want the VESC to report current readings as feedback and we will adjust on our side?
+- test torque control
+
+less important:
+- provide a configuration for linear balance motor so that we can config over UART
+- figure out the differences between rmotor and lmotor (probably one is inverted??), introduce code to handle those differences (or use
+  separate lmotor and 

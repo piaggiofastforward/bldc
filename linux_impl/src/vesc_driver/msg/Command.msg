@@ -1,0 +1,2 @@
+float32 target_cmd
+float32 current_limit

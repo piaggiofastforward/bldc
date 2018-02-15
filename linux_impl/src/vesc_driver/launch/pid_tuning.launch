@@ -1,0 +1,43 @@
+<launch>
+
+  <arg name="port"/>
+  <arg name="is_drive_motor" default="1"/>
+  <arg name="reconfigure_node_name" default="pid_tuning"/>
+  <arg name="dynamic_reconfig_topic" default="dyn_config" />
+  <arg name="kp" default="0.0" />
+  <arg name="ki" default="0.0" />
+  <arg name="kd" default="0.0" />
+  <arg name="feedback_topic" default="feedback"/>
+  <arg name="status_topic"   default="status"/>
+  <arg name="cmd_topic"      default="cmd"/>
+
+  <node name="vesc_driver"
+        pkg="vesc_driver"
+        type="driver"
+        output="screen">
+
+    <param name="port" value="$(arg port)"/>
+    <param name="dynamic_reconfig_topic" value="$(arg dynamic_reconfig_topic)" />
+    <param name="is_drive_motor" value="$(arg is_drive_motor)" />
+    <param name="feedback_topic" value="$(arg feedback_topic)"/>
+    <param name="status_topic" value="$(arg status_topic)"/>
+    <param name="cmd_topic" value="$(arg cmd_topic)"/>
+  </node>
+
+  <node name="$(arg reconfigure_node_name)"
+        pkg="vesc_driver"
+        type="dynamic_reconfig_vesc_driver"
+        output="screen">
+        <!-- ns="$(arg ns)"  -->
+
+      <param name="kp_initial" value="$(arg kp)" />
+      <param name="ki_initial" value="$(arg ki)" />
+      <param name="kd_initial" value="$(arg kd)" />
+      <param name="dynamic_reconfig_topic" value="$(arg dynamic_reconfig_topic)" />
+      <remap from="/$(arg dynamic_reconfig_topic)/parameter_descriptions" to="$(arg dynamic_reconfig_topic)/parameter_descriptions"/>
+      <remap from="/$(arg dynamic_reconfig_topic)/parameter_updates" to="$(arg dynamic_reconfig_topic)/parameter_updates"/>
+      <remap from="/$(arg dynamic_reconfig_topic)/set_parameters" to="$(arg dynamic_reconfig_topic)/set_parameters"/>
+      <remap from="$(arg reconfigure_node_name)/$(arg dynamic_reconfig_topic)" to="/vesc_driver/$(arg dynamic_reconfig_topic)" />
+  </node>
+
+</launch>
