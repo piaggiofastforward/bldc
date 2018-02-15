@@ -1,14 +1,12 @@
 /*
-	Copyright 2016 Benjamin Vedder	benjamin@vedder.se
+	Copyright 2012-2016 Benjamin Vedder	benjamin@vedder.se
 
-	This file is part of the VESC firmware.
-
-	The VESC firmware is free software: you can redistribute it and/or modify
+	This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    The VESC firmware is distributed in the hope that it will be useful,
+    This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -22,15 +20,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "ch.h"
-
-// Data types
-typedef enum {
-   MC_STATE_OFF = 0,
-   MC_STATE_DETECTING,
-   MC_STATE_RUNNING,
-   MC_STATE_FULL_BRAKE,
-} mc_state;
+// #include "ch.h"
 
 typedef enum {
 	PWM_MODE_NONSYNCHRONOUS_HISW = 0, // This mode is not recommended
@@ -65,74 +55,34 @@ typedef enum {
 	FAULT_CODE_NONE = 0,
 	FAULT_CODE_OVER_VOLTAGE,
 	FAULT_CODE_UNDER_VOLTAGE,
-	FAULT_CODE_DRV,
+	FAULT_CODE_DRV8302,
 	FAULT_CODE_ABS_OVER_CURRENT,
 	FAULT_CODE_OVER_TEMP_FET,
 	FAULT_CODE_OVER_TEMP_MOTOR
 } mc_fault_code;
 
-typedef enum {
-	CONTROL_MODE_DUTY = 0,
-	CONTROL_MODE_SPEED,
-	CONTROL_MODE_CURRENT,
-	CONTROL_MODE_CURRENT_BRAKE,
-	CONTROL_MODE_POS,
-	CONTROL_MODE_HANDBRAKE,
-	CONTROL_MODE_OPENLOOP,
-	CONTROL_MODE_NONE
-} mc_control_mode;
-
-typedef enum {
-	DISP_POS_MODE_NONE = 0,
-	DISP_POS_MODE_INDUCTANCE,
-	DISP_POS_MODE_OBSERVER,
-	DISP_POS_MODE_ENCODER,
-	DISP_POS_MODE_PID_POS,
-	DISP_POS_MODE_PID_POS_ERROR,
-	DISP_POS_MODE_ENCODER_OBSERVER_ERROR
-} disp_pos_mode;
-
-typedef enum {
-	SENSOR_PORT_MODE_HALL = 0,
-	SENSOR_PORT_MODE_ABI,
-	SENSOR_PORT_MODE_AS5047_SPI
-} sensor_port_mode;
-
+// VESC Types
 typedef struct {
-	float cycle_int_limit;
-	float cycle_int_limit_running;
-	float cycle_int_limit_max;
-	float comm_time_sum;
-	float comm_time_sum_min_rpm;
-	int32_t comms;
-	uint32_t time_at_comm;
-} mc_rpm_dep_struct;
-
-typedef enum {
-	DRV8301_OC_LIMIT = 0,
-	DRV8301_OC_LATCH_SHUTDOWN,
-	DRV8301_OC_REPORT_ONLY,
-	DRV8301_OC_DISABLED
-} drv8301_oc_mode;
-
-typedef enum {
-	DEBUG_SAMPLING_OFF = 0,
-	DEBUG_SAMPLING_NOW,
-	DEBUG_SAMPLING_START,
-	DEBUG_SAMPLING_TRIGGER_START,
-	DEBUG_SAMPLING_TRIGGER_FAULT,
-	DEBUG_SAMPLING_TRIGGER_START_NOSEND,
-	DEBUG_SAMPLING_TRIGGER_FAULT_NOSEND,
-	DEBUG_SAMPLING_SEND_LAST_SAMPLES
-} debug_sampling_mode;
-
-typedef struct {
-	float kp;
-	float ki;
-	float kd;
-	float setpoint;    // the goal current to achieve, in amps
-	float last_output; // the output current of the last iteration of the algorithm
-} mc_current_pid_configuration;
+	float v_in;
+	float temp_mos1;
+	float temp_mos2;
+	float temp_mos3;
+	float temp_mos4;
+    float temp_mos5;
+    float temp_mos6;
+    float temp_pcb;
+    float current_motor;
+    float current_in;
+    float rpm;
+    float duty_now;
+    float amp_hours;
+    float amp_hours_charged;
+    float watt_hours;
+    float watt_hours_charged;
+    int32_t tachometer;
+    int tachometer_abs;
+    mc_fault_code fault_code;
+} mc_values;
 
 typedef struct {
 	// Switching and drive
@@ -148,7 +98,6 @@ typedef struct {
 	float l_abs_current_max;
 	float l_min_erpm;
 	float l_max_erpm;
-	float l_erpm_start;
 	float l_max_erpm_fbrake;
 	float l_max_erpm_fbrake_cc;
 	float l_min_vin;
@@ -156,22 +105,19 @@ typedef struct {
 	float l_battery_cut_start;
 	float l_battery_cut_end;
 	bool l_slow_abs_current;
+	bool l_rpm_lim_neg_torque;
 	float l_temp_fet_start;
 	float l_temp_fet_end;
 	float l_temp_motor_start;
 	float l_temp_motor_end;
 	float l_min_duty;
 	float l_max_duty;
-	float l_watt_max;
-	float l_watt_min;
 	// Overridden limits (Computed during runtime)
 	float lo_current_max;
 	float lo_current_min;
 	float lo_in_current_max;
 	float lo_in_current_min;
-	float lo_current_motor_max_now;
-	float lo_current_motor_min_now;
-	// Sensorless (bldc)
+	// Sensorless
 	float sl_min_erpm;
 	float sl_min_erpm_cycle_int_limit;
 	float sl_max_fullbreak_current_dir_change;
@@ -194,7 +140,6 @@ typedef struct {
 	float foc_motor_r;
 	float foc_motor_flux_linkage;
 	float foc_observer_gain;
-	float foc_observer_gain_slow;
 	float foc_pll_kp;
 	float foc_pll_ki;
 	float foc_duty_dowmramp_kp;
@@ -206,18 +151,12 @@ typedef struct {
 	float foc_sl_d_current_factor;
 	mc_foc_sensor_mode foc_sensor_mode;
 	uint8_t foc_hall_table[8];
-	float foc_sl_erpm;
-	bool foc_sample_v0_v7;
-	bool foc_sample_high_current;
-	float foc_sat_comp;
-	bool foc_temp_comp;
-	float foc_temp_comp_base_temp;
+	float foc_hall_sl_erpm;
 	// Speed PID
 	float s_pid_kp;
 	float s_pid_ki;
 	float s_pid_kd;
 	float s_pid_min_erpm;
-	bool s_pid_allow_braking;
 	// Pos PID
 	float p_pid_kp;
 	float p_pid_ki;
@@ -231,16 +170,9 @@ typedef struct {
 	// Misc
 	int32_t m_fault_stop_time_ms;
 	float m_duty_ramp_step;
+	float m_duty_ramp_step_rpm_lim;
 	float m_current_backoff_gain;
 	uint32_t m_encoder_counts;
-	sensor_port_mode m_sensor_port_mode;
-	bool m_invert_direction;
-	drv8301_oc_mode m_drv8301_oc_mode;
-	int m_drv8301_oc_adj;
-	float m_bldc_f_sw_min;
-	float m_bldc_f_sw_max;
-	float m_dc_f_sw;
-	float m_ntc_motor_beta;
 } mc_configuration;
 
 // Applications to use
@@ -255,13 +187,6 @@ typedef enum {
 	APP_NRF,
 	APP_CUSTOM
 } app_use;
-
-// Throttle curve mode
-typedef enum {
-	THR_EXP_EXPO = 0,
-	THR_EXP_NATURAL,
-	THR_EXP_POLY
-} thr_exp_mode;
 
 // PPM control types
 typedef enum {
@@ -281,14 +206,10 @@ typedef struct {
 	float hyst;
 	float pulse_start;
 	float pulse_end;
-	float pulse_center;
 	bool median_filter;
 	bool safe_start;
-	float throttle_exp;
-	float throttle_exp_brake;
-	thr_exp_mode throttle_exp_mode;
-	float ramp_time_pos;
-	float ramp_time_neg;
+	float rpm_lim_start;
+	float rpm_lim_end;
 	bool multi_esc;
 	bool tc;
 	float tc_max_diff;
@@ -300,7 +221,6 @@ typedef enum {
 	ADC_CTRL_TYPE_CURRENT,
 	ADC_CTRL_TYPE_CURRENT_REV_CENTER,
 	ADC_CTRL_TYPE_CURRENT_REV_BUTTON,
-	ADC_CTRL_TYPE_CURRENT_REV_BUTTON_BRAKE_ADC,
 	ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_CENTER,
 	ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_BUTTON,
 	ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_ADC,
@@ -314,20 +234,13 @@ typedef struct {
 	float hyst;
 	float voltage_start;
 	float voltage_end;
-	float voltage_center;
-	float voltage2_start;
-	float voltage2_end;
 	bool use_filter;
 	bool safe_start;
 	bool cc_button_inverted;
 	bool rev_button_inverted;
 	bool voltage_inverted;
-	bool voltage2_inverted;
-	float throttle_exp;
-	float throttle_exp_brake;
-	thr_exp_mode throttle_exp_mode;
-	float ramp_time_pos;
-	float ramp_time_neg;
+	float rpm_lim_start;
+	float rpm_lim_end;
 	bool multi_esc;
 	bool tc;
 	float tc_max_diff;
@@ -344,12 +257,11 @@ typedef enum {
 typedef struct {
 	chuk_control_type ctrl_type;
 	float hyst;
+	float rpm_lim_start;
+	float rpm_lim_end;
 	float ramp_time_pos;
 	float ramp_time_neg;
 	float stick_erpm_per_s_in_cc;
-	float throttle_exp;
-	float throttle_exp_brake;
-	thr_exp_mode throttle_exp_mode;
 	bool multi_esc;
 	bool tc;
 	float tc_max_diff;
@@ -450,7 +362,6 @@ typedef enum {
 	COMM_SET_CURRENT_BRAKE,
 	COMM_SET_RPM,
 	COMM_SET_POS,
-	COMM_SET_HANDBRAKE,
 	COMM_SET_DETECT,
 	COMM_SET_SERVO_POS,
 	COMM_SET_MCCONF,
@@ -476,120 +387,7 @@ typedef enum {
 	COMM_GET_DECODED_CHUK,
 	COMM_FORWARD_CAN,
 	COMM_SET_CHUCK_DATA,
-	COMM_CUSTOM_APP_DATA,
-	COMM_NRF_START_PAIRING
+	COMM_CUSTOM_APP_DATA
 } COMM_PACKET_ID;
-
-// CAN commands
-typedef enum {
-	CAN_PACKET_SET_DUTY = 0,
-	CAN_PACKET_SET_CURRENT,
-	CAN_PACKET_SET_CURRENT_BRAKE,
-	CAN_PACKET_SET_RPM,
-	CAN_PACKET_SET_POS,
-	CAN_PACKET_FILL_RX_BUFFER,
-	CAN_PACKET_FILL_RX_BUFFER_LONG,
-	CAN_PACKET_PROCESS_RX_BUFFER,
-	CAN_PACKET_PROCESS_SHORT_BUFFER,
-	CAN_PACKET_STATUS,
-	CAN_PACKET_SET_CURRENT_REL,
-	CAN_PACKET_SET_CURRENT_BRAKE_REL
-} CAN_PACKET_ID;
-
-// Logged fault data
-typedef struct {
-	mc_fault_code fault;
-	float current;
-	float current_filtered;
-	float voltage;
-	float duty;
-	float rpm;
-	int tacho;
-	int cycles_running;
-	int tim_val_samp;
-	int tim_current_samp;
-	int tim_top;
-	int comm_step;
-	float temperature;
-	int drv8301_faults;
-} fault_data;
-
-// External LED state
-typedef enum {
-	LED_EXT_OFF = 0,
-	LED_EXT_NORMAL,
-	LED_EXT_BRAKE,
-	LED_EXT_TURN_LEFT,
-	LED_EXT_TURN_RIGHT,
-	LED_EXT_BRAKE_TURN_LEFT,
-	LED_EXT_BRAKE_TURN_RIGHT,
-	LED_EXT_BATT
-} LED_EXT_STATE;
-
-typedef struct {
-	int js_x;
-	int js_y;
-	int acc_x;
-	int acc_y;
-	int acc_z;
-	bool bt_c;
-	bool bt_z;
-} chuck_data;
-
-typedef struct {
-	int id;
-	systime_t rx_time;
-	float rpm;
-	float current;
-	float duty;
-} can_status_msg;
-
-typedef struct {
-	uint8_t js_x;
-	uint8_t js_y;
-	bool bt_c;
-	bool bt_z;
-	bool bt_push;
-	float vbat;
-} mote_state;
-
-typedef enum {
-	MOTE_PACKET_BATT_LEVEL = 0,
-	MOTE_PACKET_BUTTONS,
-	MOTE_PACKET_ALIVE,
-	MOTE_PACKET_FILL_RX_BUFFER,
-	MOTE_PACKET_FILL_RX_BUFFER_LONG,
-	MOTE_PACKET_PROCESS_RX_BUFFER,
-	MOTE_PACKET_PROCESS_SHORT_BUFFER,
-	MOTE_PACKET_PAIRING_INFO
-} MOTE_PACKET;
-
-typedef struct {
-	float v_in;
-	float temp_mos1;
-	float temp_mos2;
-	float temp_mos3;
-	float temp_mos4;
-    float temp_mos5;
-    float temp_mos6;
-    float temp_pcb;
-    float current_motor;
-    float current_in;
-    float rpm;
-    float duty_now;
-    float amp_hours;
-    float amp_hours_charged;
-    float watt_hours;
-    float watt_hours_charged;
-    int tachometer;
-    int tachometer_abs;
-    mc_fault_code fault_code;
-} mc_values;
-
-typedef enum {
-	NRF_PAIR_STARTED = 0,
-	NRF_PAIR_OK,
-	NRF_PAIR_FAIL
-} NRF_PAIR_RES;
 
 #endif /* DATATYPES_H_ */

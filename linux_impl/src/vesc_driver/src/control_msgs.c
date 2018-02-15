@@ -1,5 +1,5 @@
 
-#include "control_msgs.h"
+#include "vesc_driver/control_msgs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -85,7 +85,7 @@ int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd)
 
 int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_union *status)
 {
-  if (data[0] != STATUS_DATA)
+  if (data[0] != STATUS_DATA || size != STATUS_SIZE)
   {
     return -1;
   }
@@ -96,7 +96,7 @@ int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_un
 
 int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedback_union *fb)
 {
-  if (data[0] != FEEDBACK_DATA)
+  if (data[0] != FEEDBACK_DATA || size != FB_SIZE)
   {
     return -1;
   }

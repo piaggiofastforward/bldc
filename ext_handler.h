@@ -14,10 +14,10 @@ typedef void (*EstopHandlerFunc)(void);
   Configure all interrupt sources that are needed for application_uart.c:
   - estop
 */
-void configure_EXT();
+void configure_EXT(void);
 
 void set_estop_callback(EstopHandlerFunc f);
 
-void estop_state_change_handler();
+void estop_state_change_handler(void);
 
 #endif
