@@ -103,21 +103,3 @@ int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedbac
   memcpy(fb->feedback_bytes, data + 1, sizeof(mc_feedback));
   return 0;
 }
-
-int extractCurrentPIDData(const uint8_t* data, const unsigned int size, mc_config_current_pid_union *config)
-{
-  if (data[0] != CONFIG_WRITE_CURRENT_PID || size != CURRENT_PID_CONFIG_SIZE)
-  {
-    return -1;
-  }
-  memcpy(config->config_bytes, data + 1, sizeof(mc_config_current_pid));
-  return 0;
-}
-
-void sendCurrentPIDData(packetSendFunc sendFunc, const mc_config_current_pid_union config)
-{
-  uint8_t data[CURRENT_PID_CONFIG_SIZE];
-  data[0] = CONFIG_WRITE_CURRENT_PID;
-  memcpy(data + 1, config.config_bytes, sizeof(mc_config_current_pid));
-  sendFunc(data, sizeof(data));
-}

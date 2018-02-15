@@ -317,7 +317,6 @@ static void process_packet(unsigned char *data, unsigned int len)
 	(void)len;
   mc_config_union config;
   mc_config_hall_union config_hall;
-  mc_config_current_pid_union config_i_pid;
 
 	switch (data[0])
 	{
@@ -325,20 +324,6 @@ static void process_packet(unsigned char *data, unsigned int len)
 
 			// need to implement
 			break;
-
-    case CONFIG_WRITE_CURRENT_PID:
-      extractCurrentPIDDataF(config_i_pid, data);
-
-      // should we do something to stop motor operation or something???
-      mc_interface_set_pid_current_parameters(
-        config_i_pid.config.kp,
-        config_i_pid.config.ki,
-        config_i_pid.config.kd
-      );
-
-      // optionally echo it back to the driver
-      sendCurrentPIDData(send_packet_wrapper, config_i_pid);
-      break;
 
 		case CONTROL_WRITE:
       if (extractCommand(data, len, &currentCommand) == 0)
@@ -684,7 +669,6 @@ void updateFeedback(void)
   fb.feedback.measured_position = encoder_abs_count();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
-  fb.feedback.last_pid_current_output = mc_interface_get_last_pid_current_output(); 
   fb.feedback.switch_flags      = estop;
 }
 
@@ -704,7 +688,7 @@ void setCommand()
       break;
     case CURRENT:
       echoCommand();
-      mc_interface_set_pid_current((float)currentCommand.target_cmd_i / 1000.0);
+      mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
       // mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
       break;
     // case DUTY:

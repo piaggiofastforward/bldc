@@ -85,7 +85,7 @@ int extractCommand(const uint8_t* data, const unsigned int size, mc_cmd *cmd)
 
 int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_union *status)
 {
-  if (data[0] != STATUS_DATA || size != STATUS_SIZE)
+  if (data[0] != STATUS_DATA)
   {
     return -1;
   }
@@ -96,28 +96,10 @@ int extractStatusData(const uint8_t* data, const unsigned int size, mc_status_un
 
 int extractFeedbackData(const uint8_t* data, const unsigned int size, mc_feedback_union *fb)
 {
-  if (data[0] != FEEDBACK_DATA || size != FB_SIZE)
+  if (data[0] != FEEDBACK_DATA)
   {
     return -1;
   }
   memcpy(fb->feedback_bytes, data + 1, sizeof(mc_feedback));
   return 0;
-}
-
-int extractCurrentPIDData(const uint8_t* data, const unsigned int size, mc_config_current_pid_union *config)
-{
-  if (data[0] != CONFIG_WRITE_CURRENT_PID || size != CURRENT_PID_CONFIG_SIZE)
-  {
-    return -1;
-  }
-  memcpy(config->config_bytes, data + 1, sizeof(mc_config_current_pid));
-  return 0;
-}
-
-void sendCurrentPIDData(packetSendFunc sendFunc, const mc_config_current_pid_union config)
-{
-  uint8_t data[CURRENT_PID_CONFIG_SIZE];
-  data[0] = CONFIG_WRITE_CURRENT_PID;
-  memcpy(data + 1, config.config_bytes, sizeof(mc_config_current_pid));
-  sendFunc(data, sizeof(data));
 }

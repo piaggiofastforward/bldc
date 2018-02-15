@@ -413,6 +413,9 @@ void mc_interface_handle_timeout(float timeout_brake_current) {
 			mcpwm_set_pid_current(0.0);
 			break;
 
+		case MOTOR_TYPE_FOC:
+			mcpwm_foc_set_current(0.0);
+
 		default:
 			break;
 	}
