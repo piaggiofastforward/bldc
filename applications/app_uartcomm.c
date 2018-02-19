@@ -78,6 +78,13 @@ static volatile bool estop = true;
  * to ensure that we process bytes in the actual order that we received them.
  */ 
 
+typedef enum {
+  STATE_START_BYTE = 0, // looking to receive the start byte
+  STATE_PACKET_LEN,     // looking to receive the payload length
+  STATE_UART_RECEIVING  // uartStartReceive() has been called
+} uart_driver_state;
+static volatile uart_driver_state uart_state;
+
 // might need to change this later for REALLY BIG packets (ie: packets larger than 255)
 static volatile uint8_t packetLength = 0;
 static volatile bool startByteReceived = false;
@@ -107,7 +114,6 @@ static void setHall(hall_table_t hall_table);
 static void setHallFoc(hall_table_foc_t hall_table);
 static void setCommand(void);
 static void sendConfigCommitConfirmation(void);
-static int getStringPotValue(void);
 volatile float *getParamPtr(enum mc_config_param param);
 
 /**
@@ -173,13 +179,6 @@ void echoCommand(void);
 void confirmationEcho(void);
 
 
-// limit switches are probably going to be removed, and estop pin definitions have moved to hw60.h
-// #define ESTOP_PIN_INDEX  5
-#define FWDLIM_PIN_INDEX 3
-#define REVLIM_PIN_INDEX 4
-#define FWDLIM_PORT      GPIOA
-#define REVLIM_PORT      GPIOA
-
 /**
                         Function Definitions
 */
@@ -235,20 +234,22 @@ static void rxchar(UARTDriver *uartp, uint16_t c)
 	serial_rx_buffer[serial_rx_write_pos++] = c;
 
   // this is the start byte for messages with len < 255
-  if ((uint8_t)c == (uint8_t)2)
+  if (uart_state == STATE_START_BYTE)
   {
-    startByteReceived = true;
+    if ((uint8_t)c == (uint8_t)2)
+    {
+      uart_state = STATE_PACKET_LEN;
+    }
   }
 
-  // store the packetLength, accounting for 2 CRC bytes and a stop byte
-  if (startByteReceived && !packetLengthReceived)
+  // store the packetLength, accounting for 2 CRC bytes and a stop byte in addition
+  // to the payload itself
+  else if (uart_state == STATE_PACKET_LEN)
   {
     packetLength = c;
     packetLength += 3;
-    packetLengthReceived = true;
-    startByteReceived = false;
     uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
-    uartReceiving = true;
+    uart_state = STATE_UART_RECEIVING;
   }
 
 	if (serial_rx_write_pos == SERIAL_RX_BUFFER_SIZE) {
@@ -283,9 +284,7 @@ static void rxend(UARTDriver *uartp)
     }
     i++;
   }
-  packetLengthReceived = false;
-  startByteReceived = false;
-  uartReceiving = false;
+  uart_state = STATE_START_BYTE;
   chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
@@ -431,11 +430,7 @@ static void initHardware()
       PAL_STM32_PUDR_PULLUP);
 
   palClearPad(HW_ESTOP_PORT, HW_ESTOP_PIN);
-  palClearPad(FWDLIM_PORT, FWDLIM_PIN_INDEX);
-  palClearPad(REVLIM_PORT, REVLIM_PIN_INDEX);
   palSetPadMode(HW_ESTOP_PORT, HW_ESTOP_PIN, PAL_MODE_INPUT_PULLUP);
-  palSetPadMode(FWDLIM_PORT, FWDLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
-  palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
 
   estop     = READ_ESTOP();
   configure_EXT();
@@ -529,7 +524,7 @@ static THD_FUNCTION(packet_process_thread, arg)
      *  received in both of the two above ways are processed correctly.
      */
 
-    while (!uartReceiving && (serial_rx_read_pos != serial_rx_write_pos))
+    while ((uart_state != STATE_UART_RECEIVING) && (serial_rx_read_pos != serial_rx_write_pos))
     {
 
       /**
@@ -689,23 +684,7 @@ void setCommand()
     case CURRENT:
       echoCommand();
       mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
-      // mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
       break;
-    // case DUTY:
-    //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;
-    //   mc_interface_set_duty(currentCommand.target_cmd_f);
-    //   break;
-    // case POSITION:
-    //   fb.feedback.commanded_value = currentCommand.target_cmd_i;
-    //   mc_interface_set_pid_pos(currentCommand.target_cmd_i);
-    //   break;
-    // case SCALE_POS:
-    //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;
-    //   mc_interface_set_pid_pos(descale_position(currentCommand.target_cmd_f));
-    //   break;
-    // case HOMING: 
-    //   fb.feedback.commanded_value = mc_interface_get_pid_pos_now();
-    //   homing_sequence();
     default:
       break;
   }
@@ -772,9 +751,4 @@ static void read_estop_wait(void)
 {
   chThdSleepMilliseconds(ESTOP_DEBOUNCE_MS);
   estop = READ_ESTOP();
-}
-
-static int getStringPotValue(void)
-{
-  return ADC_Value[7];
 }
