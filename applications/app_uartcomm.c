@@ -51,8 +51,9 @@ static THD_WORKING_AREA(packet_process_thread_wa, 4096);
 static thread_t *process_tp;
 
 /**
- * This buffer will be used for characters received through rxChar(). We should only be receiving the first 2 or 3 bytes
- * of a packet this way - when we parse the packet length, receive the rest of the data through uartStartReceive().
+ * This buffer will be used for characters received through rxChar(). We should 
+ * only be receiving the first 2 or 3 bytes of a packet this way - when we parse 
+ *  the packet length, receive the rest of the data through uartStartReceive().
  */
 static uint8_t serial_rx_buffer[SERIAL_RX_BUFFER_SIZE];
 static unsigned int serial_rx_read_pos = 0;
@@ -87,11 +88,6 @@ static volatile uart_driver_state uart_state;
 
 // might need to change this later for REALLY BIG packets (ie: packets larger than 255)
 static volatile uint8_t packetLength = 0;
-static volatile bool startByteReceived = false;
-static volatile bool packetLengthReceived = false;
-
-// set this to true after calling uartStartReceive(), set back to false in rxEnd()
-static volatile bool uartReceiving = false;
 
 // this will be set through ext_handler in response to an interrupt on the estop pin
 static volatile bool shouldReadEstop = false;
@@ -182,6 +178,23 @@ void confirmationEcho(void);
 /**
                         Function Definitions
 */
+
+/**                     APLICATION UART DRIVER
+ *
+ * We can receive data in 2 ways:
+ * 
+ * 1) Through the rxChar() interrupt. This will be called when we receive a character
+ *    but the application wasnt ready for it. Generally, this will occur on the first 
+ *    two bytes of an RX transaction - we need to receive the start byte as well as 
+ *    the packet length (so we know how many bytes to receive through the call to uartStartReceive()).
+ *
+ * 2) Through calls to uartReceive(). This will ensure a "proper" receiving of data - 
+ *    the rxchar() callback will not be invoked with every incoming byte. Instead, rxEnd() 
+ *    will be invoked when the number of bytes specified in the call to uartStartReceive() 
+ *    is reached. In general, the number of specified bytes to receive will be equivalent 
+ *    to the number of bytes left to receive in the packet. Thus, rxend() should 
+ *    be invoked once the last byte of an incoming transaction is received.
+ */
 
 /*
  * This callback is invoked when a transmission buffer has been completely
@@ -352,7 +365,6 @@ static void process_packet(unsigned char *data, unsigned int len)
       chVTSet(&start_pub_task_vt, MS2ST(DELAY_CONFIG_WRITE_START_PUB_MS), startPubTaskCb, NULL);
       memcpy(config.config_bytes, data + 1, sizeof(mc_config));
       setParameter(config.config, &mcconf);
-			// updateConfigReceived = true;
 			break;
 
     case CONFIG_WRITE_HALL:
@@ -505,26 +517,7 @@ static THD_FUNCTION(packet_process_thread, arg)
       shouldReadEstop = false;
     }
 
-    /**
-     * We can receive data in 2 ways:
-     * 
-     * 1) Through the rxChar() interrupt above. This will be called when we receive a character
-     *    but the application wasnt ready for it. Generally, this will occur on the first two bytes of an RX
-     *    transaction - we need to receive the start byte as well as the packet length (so we know how many bytes
-     *    to receive through the call to uartStartReceive()).
-     *
-     * 2) Through calls to uartReceive(). This will ensure a "proper" receiving of data - 
-     *    the rxchar() callback will not be invoked with every incoming byte. Instead, rxEnd() will be invoked
-     *    when the number of bytes specified in the call to uartStartReceive() is reached. In general, the number
-     *    of specified bytes to receive will be equivalent to the number of bytes left to receive in the packet.
-     *    Thus, rxend() should generally be invoked once the last byte of an incoming transaction is received.
-     *
-     *  "uartReceiving" will be set to true just after uartStartReceive() is called, and will be set back to false after
-     *  all of the bytes received in the uart_receive_buffer are placed into the serial_rx_buffer. This ensures bytes
-     *  received in both of the two above ways are processed correctly.
-     */
-
-    while ((uart_state != STATE_UART_RECEIVING) && (serial_rx_read_pos != serial_rx_write_pos))
+    while (serial_rx_read_pos != serial_rx_write_pos)
     {
 
       /**
