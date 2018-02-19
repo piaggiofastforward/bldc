@@ -41,7 +41,7 @@
 #include "ext_handler.h"
 
 // Settings
-#define PACKET_HANDLER				1
+#define PACKET_HANDLER				    1
 #define SERIAL_RX_BUFFER_SIZE		128
 #define MAX_BYTES_PER_READ      128
 
@@ -121,8 +121,8 @@ static virtual_timer_t status_task_vt;
 #define isPublishing() (chVTIsArmedI(&feedback_task_vt) || chVTIsArmedI(&status_task_vt))
 static void feedbackTaskCb(void* _);
 static void statusTaskCb(void* _);
-void updateFeedback(void);
-void updateStatus(void);
+static void updateFeedback(void);
+static void updateStatus(void);
 
 /**
  *  In response to an interrupt from the estop pin, wait to account for button debounce,
@@ -171,8 +171,8 @@ static void send_packet(unsigned char *data, unsigned int len);
 /**
  * For testing purposes!
  */
-void echoCommand(void);
-void confirmationEcho(void);
+static void echoCommand(void);
+static void confirmationEcho(void);
 
 
 /**
@@ -334,7 +334,7 @@ static void process_packet(unsigned char *data, unsigned int len)
 	{
 		case CONFIG_READ:
 
-			// need to implement
+			// currently no real need for this
 			break;
 
 		case CONTROL_WRITE:
@@ -361,7 +361,7 @@ static void process_packet(unsigned char *data, unsigned int len)
       {
         disablePublishing();
       }
-      // start publishing again if we dont receive a config within 50 ms
+      // start publishing again if we dont receive a config within a specified amount of time
       chVTSet(&start_pub_task_vt, MS2ST(DELAY_CONFIG_WRITE_START_PUB_MS), startPubTaskCb, NULL);
       memcpy(config.config_bytes, data + 1, sizeof(mc_config));
       setParameter(config.config, &mcconf);
@@ -429,8 +429,10 @@ static void send_packet(unsigned char *data, unsigned int len)
 }
 
 /**
- * Initialize estop, fwd_limit, rev_limit switches, and UART pins.
- * Initialize EXT subsystem for hardware interrupts.
+ * Initialize UART and estop along with EXT subsystem for hardware interrupts.
+ * Our application-level callback function for handling estop state changes is
+ * passed to the ext_handler, since it makes more sense for EXT to live in the
+ * top-level and not within application code.
  */
 static void initHardware()
 {
@@ -451,6 +453,21 @@ static void initHardware()
 
 void app_uartcomm_start(void)
 {
+
+  /**
+   *  The packet interface provides functions to send data of our own internal message protocol
+   *  and wrap it in headers, footers, and checksum.
+   *
+   *  Sending data:
+   *  packet_send_packet() takes a payload, wraps it, and calls the first passed argument
+   *  (here, send_packet()) to deal with the actual transmission of the resultant buffer.
+   *
+   *  Receiving data:
+   *  packet_process_byte() should be called with every received byte. This runs a state machine
+   *  and calls the second argument passed (here, process_packet()) to handle the received packet.   
+   *
+   *
+   */
 	packet_init(send_packet, process_packet, PACKET_HANDLER);
 	uartStart(&HW_UART_DEV, &uart_cfg);
   initHardware();
@@ -497,8 +514,8 @@ static THD_FUNCTION(packet_process_thread, arg)
 	process_tp = chThdGetSelfX();
 
   /**
-   * Initialize timers for feedback and status reports. These timers will set the shouldSendFeedback,
-   * shouldSendStatus, and shouldReadEncTicks flags in an interrupt context, and we will do the actual
+   * Initialize timers for feedback and status reports. These timers will set the shouldSendFeedback
+   * and shouldSendStatus flags in an interrupt context, and we will do the actual
    * operation in the main thread.
    */
   chVTObjectInit(&start_pub_task_vt);
