@@ -12,7 +12,9 @@ Our vesc interface is done over `UART`, and all communication functionality can 
 
 The folder `linux_impl` contains a Linux driver to send out commands to a VESC connected over UART. This driver uses the `serial::Serial` library and is intended for use along with an FTDI chip.
 
-## Building/Uploading code ##
+Virtually all other code in this repo pertains to the VESC firmware, including Chibi RTOS, `vedderb`'s VESC firmware on top of that, and our application firmware.
+
+### Building/Uploading code ###
 
 Build everything:
 `./scripts/build.sh`
