@@ -1,12 +1,28 @@
 This is the source code for the VESC DC/BLDC/FOC controller. Read more at  
 http://vesc-project.com/
 
-## PFF-BLDC ##
+# PFF-BLDC #
 
 Our vesc interface is done over `UART`, and all communication functionality can be found in `applications/app_uartcomm.c`. Here are some characteristics:
 
 - Feedback is published in response to received commands so the frequency is dictated by that of incoming data. A timer is implemented to provide a minimum feedback frequency of 50Hz if commands aren't being given.
 - Status publishing at 20Hz (configurable via `STATUS_RATE_MS`)
+
+## Driver and Commander ##
+
+The folder `linux_impl` contains a Linux driver to send out commands to a VESC connected over UART. This driver uses the `serial::Serial` library and is intended for use along with an FTDI chip.
+
+## Building/Uploading code ##
+
+Build everything:
+`./scripts/build.sh`
+
+Linux driver:
+`cd linux_impl && catkin_make`
+
+VESC firmware:
+`make` (`make upload` to flash)
+
 
 ## VESC Operation - General Instructions ##
 
