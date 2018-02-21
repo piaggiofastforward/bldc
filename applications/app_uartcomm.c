@@ -72,7 +72,7 @@ static int is_running = 0;
 volatile bool commandReceived      = false;
 volatile bool updateConfigReceived = false;
 volatile bool commitConfigReceived = false;
-static volatile bool estop = true;
+static volatile bool estop         = true;
 
 /**
  * State variables for coordinating characters received through rxChar() and through uartStartReceive(),
@@ -88,9 +88,6 @@ static volatile uart_driver_state uart_state;
 
 // might need to change this later for REALLY BIG packets (ie: packets larger than 255)
 static volatile uint8_t packetLength = 0;
-
-// this will be set through ext_handler in response to an interrupt on the estop pin
-static volatile bool shouldReadEstop = false;
 
 /**
  * Structs to hold various transaction and state data.
@@ -119,30 +116,31 @@ volatile float *getParamPtr(enum mc_config_param param);
 static virtual_timer_t feedback_task_vt;
 static virtual_timer_t status_task_vt;
 #define isPublishing() (chVTIsArmedI(&feedback_task_vt) || chVTIsArmedI(&status_task_vt))
-static void feedbackTaskCb(void* _);
-static void statusTaskCb(void* _);
-static void updateFeedback(void);
-static void updateStatus(void);
+static void feedback_task_cb(void* _);
+static void status_task_cb(void* _);
+static void update_feedback(void);
+static void update_status(void);
 
 /**
- *  In response to an interrupt from the estop pin, wait to account for button debounce,
- *  then read the pin.
+ *  In response to an interrupt from the estop pin, wait to account for button debounce, then
+ *  read the state through a timer interrupt. 
  */
-#define ESTOP_DEBOUNCE_MS 15  // PLENTY
-static void read_estop_wait(void);
+#define ESTOP_DEBOUNCE_MS 15 // PLENTY
+static virtual_timer_t estop_debounce_task_vt;
+static void read_estop_cb(void);
 /**
  *  Enable/disable the virtual timer interrupts that prompt us to send feedback/status data. This 
  *  will be used when we get an FOC detection request.
  */
-static void disablePublishing(void);
-static void enablePublishing(void);
+static void disable_publishing(void);
+static void enable_publishing(void);
 
 /**
  *  Use this to aid in stopping/starting publishing when we receive a CONFIG_WRITE command.
  *  Schedule publishing to start up again in the amount of time below.
  */
 static virtual_timer_t start_pub_task_vt;
-static void startPubTaskCb(void* _);
+static void start_pub_task_cb(void* _);
 #define DELAY_CONFIG_WRITE_START_PUB_MS 50
 
 /**
@@ -171,8 +169,8 @@ static void send_packet(unsigned char *data, unsigned int len);
 /**
  * For testing purposes!
  */
-static void echoCommand(void);
-static void confirmationEcho(void);
+static void echo_command(void);
+static void confirmation_echo(void);
 
 
 /**
@@ -352,17 +350,17 @@ static void process_packet(unsigned char *data, unsigned int len)
           chVTReset(&feedback_task_vt);
 
         shouldSendFeedback = true;
-        chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+        chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedback_task_cb, NULL);
       }
 			break;
 
 		case CONFIG_WRITE:
       if (isPublishing())
       {
-        disablePublishing();
+        disable_publishing();
       }
       // start publishing again if we dont receive a config within a specified amount of time
-      chVTSet(&start_pub_task_vt, MS2ST(DELAY_CONFIG_WRITE_START_PUB_MS), startPubTaskCb, NULL);
+      chVTSet(&start_pub_task_vt, MS2ST(DELAY_CONFIG_WRITE_START_PUB_MS), start_pub_task_cb, NULL);
       memcpy(config.config_bytes, data + 1, sizeof(mc_config));
       setParameter(config.config, &mcconf);
 			break;
@@ -378,7 +376,7 @@ static void process_packet(unsigned char *data, unsigned int len)
     case COMMIT_MC_CONFIG:
       if (isPublishing())
       {
-        disablePublishing();
+        disable_publishing();
       }
       // at this point, dont start publishing until after we send the confirmation response
       chVTReset(&start_pub_task_vt);
@@ -388,10 +386,10 @@ static void process_packet(unsigned char *data, unsigned int len)
     case REQUEST_DETECT_HALL_FOC:
 
       // dont do things (like send feedback and accept commands to drive the motor!!!)
-      disablePublishing();
+      disable_publishing();
       detectHallTableFoc();
       chThdSleepMilliseconds(200);
-      enablePublishing();
+      enable_publishing();
       break;
 
 		default:
@@ -520,18 +518,13 @@ static THD_FUNCTION(packet_process_thread, arg)
   chVTObjectInit(&start_pub_task_vt);
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
-  chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
-  chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
+  chVTObjectInit(&estop_debounce_task_vt);
+  chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedback_task_cb, NULL);
+  chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), status_task_cb, NULL);
 
 	while (1)
 	{
 		chEvtWaitAny((eventmask_t) 1);
-
-    if (shouldReadEstop)
-    {
-      read_estop_wait();
-      shouldReadEstop = false;
-    }
 
     while (serial_rx_read_pos != serial_rx_write_pos)
     {
@@ -552,13 +545,13 @@ static THD_FUNCTION(packet_process_thread, arg)
      */
 		if (shouldSendFeedback)
     {
-      updateFeedback();
+      update_feedback();
       sendFeedbackData(send_packet_wrapper, fb);
       shouldSendFeedback = false;
     }
     if (shouldSendStatus)
     {
-      updateStatus();
+      update_status();
       sendStatusData(send_packet_wrapper, status);
       shouldSendStatus = false;
     }
@@ -572,13 +565,13 @@ static THD_FUNCTION(packet_process_thread, arg)
 
     if (commitConfigReceived)
     {
-      disablePublishing();
+      disable_publishing();
       conf_general_store_mc_configuration((mc_configuration *) &mcconf);
       mc_interface_set_configuration((mc_configuration *) &mcconf);
       chThdSleepMilliseconds(500);
       sendConfigCommitConfirmation();
       commitConfigReceived = false;
-      enablePublishing();
+      enable_publishing();
     }
 	}
 }
@@ -595,12 +588,12 @@ static THD_FUNCTION(packet_process_thread, arg)
  * For testing purposes, you can have the VESC echo back a received request
  * instead of actually issuing the command
  */
-static void echoCommand()
+static void echo_command()
 {
   sendCommand(send_packet_wrapper, currentCommand);
 }
 
-static void confirmationEcho()
+static void confirmation_echo()
 {
   uint8_t confirmationBuf[3] = {0, 0, 0};
   send_packet_wrapper(confirmationBuf, 3);
@@ -617,48 +610,48 @@ static void sendConfigCommitConfirmation(void)
 }
 
 // stop the timer interrupts that cause us to gather and publish feedback data
-static void disablePublishing(void)
+static void disable_publishing(void)
 {
   chVTReset(&feedback_task_vt);
   chVTReset(&status_task_vt);
 }
 
-static void enablePublishing(void)
+static void enable_publishing(void)
 {
-  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
-  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedback_task_cb, NULL);
+  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), status_task_cb, NULL);
 }
 
 /**
  * Set flags to indicate that we should publish feedback or status, handle in main thread.
  */
-static void startPubTaskCb(void* _)
+static void start_pub_task_cb(void* _)
 {
   (void)_;
   chSysLockFromISR();
-  enablePublishing();
+  enable_publishing();
   chSysUnlockFromISR();
 }
 
 /**
  * Set flags to indicate that we should publish feedback or status, handle in main thread.
  */
-static void feedbackTaskCb(void* _)
+static void feedback_task_cb(void* _)
 {
   (void)_;
   shouldSendFeedback = true;
   chSysLockFromISR();
-  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedback_task_cb, NULL);
   chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
 
-static void statusTaskCb(void* _)
+static void status_task_cb(void* _)
 {
   (void)_;
   shouldSendStatus = true;
   chSysLockFromISR();
-  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), status_task_cb, NULL);
   chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
@@ -666,7 +659,7 @@ static void statusTaskCb(void* _)
 /*
  * Updates the feedback struct with current data
  */ 
-static void updateFeedback(void)
+static void update_feedback(void)
 {
   fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
@@ -676,7 +669,7 @@ static void updateFeedback(void)
   fb.feedback.estop             = estop;
 }
 
-static void updateStatus(void)
+static void update_status(void)
 {
   status.status.fault_code = mc_interface_get_fault();
 }
@@ -746,14 +739,23 @@ static void detectHallTableFoc(void)
   }
 }
 
+/**
+ *  In case someone presses the estop quickly several times, schedule the timer so that
+ *  the pin is read at time ESTOP_DEBOUNCE_MS after the last interrupt. 
+ */
 void app_handle_estop_interrupt(void)
 {
-  shouldReadEstop = true;
+  chSysLockFromISR();
+  if (chVTIsArmedI(&estop_debounce_task_vt))
+  {
+    chVTResetI(&estop_debounce_task_vt); 
+  }
+  chVTSetI(&estop_debounce_task_vt, MS2ST(ESTOP_DEBOUNCE_MS), read_estop_cb, NULL);
   chEvtSignalI(process_tp, (eventmask_t) 1);
+  chSysUnlockFromISR();
 }
 
-static void read_estop_wait(void)
+static void read_estop_cb(void)
 {
-  chThdSleepMilliseconds(ESTOP_DEBOUNCE_MS);
   estop = READ_ESTOP();
 }
