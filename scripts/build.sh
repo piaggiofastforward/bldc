@@ -1,22 +1,22 @@
 #! /usr/bin/env bash
 
-# find the directory of this script, then go back one directory to find the base of the repo
-# https://stackoverflow.com/questions/59895/getting-the-source-directory-of-a-bash-script-from-within
-SCRIPTS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd $SCRIPTS_DIR && cd ..
-REPO_DIR=$(pwd)
+BLDC_DIR=$HOME/bldc-pff
+LINUX_IMPL_DIR=$BLDC_DIR/linux_impl
+START_DIR=$(pwd)
 
-vesc_dir=$HOME/pff-bldc
-linux_dir=$REPO_DIR/linux_impl
 
-function stop_build {
-	printf "$1"
-	printf "\nFix errors and rerun.\n"
-	cd $start_dir
-	exit 1
+function exit_build {
+    printf "$1"
+    printf "\n\n"
+    exit 1
 }
 
-printf "\n\n\t\tBuilding VESC firmware...\n\n"
-cd $REPO_DIR && (make || stop_build "VESC build failed!")
-printf "\n\n\t\tBuilding Linux driver...\n\n"
-cd $linux_dir && (catkin_make || stop_build "catkin build failed!")
+# build the vesc code first
+printf "\n\n\tBuilding VESC firmware...\n\n"
+cd $BLDC_DIR && (make || exit_build "pff-bldc: build failed!")
+
+# then, build linux driver
+printf "\n\n\tBuilding Linux driver...\n\n"
+cd $LINUX_IMPL_DIR && (catkin_make || exit_build "vesc_driver: build failed!")
+source $LINUX_IMPL_DIR/devel/setup.bash
+cd $START_DIR
