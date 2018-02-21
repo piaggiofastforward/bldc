@@ -127,7 +127,8 @@ static void update_status(void);
  */
 #define ESTOP_DEBOUNCE_MS 15 // PLENTY
 static virtual_timer_t estop_debounce_task_vt;
-static void read_estop_cb(void);
+static void read_estop_cb(void* _);
+static void handle_estop_interrupt(void);
 /**
  *  Enable/disable the virtual timer interrupts that prompt us to send feedback/status data. This 
  *  will be used when we get an FOC detection request.
@@ -444,9 +445,9 @@ static void initHardware()
   palClearPad(HW_ESTOP_PORT, HW_ESTOP_PIN);
   palSetPadMode(HW_ESTOP_PORT, HW_ESTOP_PIN, PAL_MODE_INPUT_PULLUP);
 
-  estop     = READ_ESTOP();
+  estop = READ_ESTOP();
   configure_EXT();
-  set_estop_callback(app_handle_estop_interrupt);
+  set_estop_callback(handle_estop_interrupt);
 }
 
 /**
@@ -743,7 +744,7 @@ static void detectHallTableFoc(void)
  *  In case someone presses the estop quickly several times, schedule the timer so that
  *  the pin is read at time ESTOP_DEBOUNCE_MS after the last interrupt. 
  */
-void app_handle_estop_interrupt(void)
+static void handle_estop_interrupt(void)
 {
   chSysLockFromISR();
   if (chVTIsArmedI(&estop_debounce_task_vt))
@@ -755,7 +756,10 @@ void app_handle_estop_interrupt(void)
   chSysUnlockFromISR();
 }
 
-static void read_estop_cb(void)
+static void read_estop_cb(void* _)
 {
+  (void)_;
+  chSysLock();
   estop = READ_ESTOP();
+  chSysUnlock();
 }

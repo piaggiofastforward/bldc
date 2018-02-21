@@ -54,13 +54,12 @@ CH_IRQ_HANDLER(HW_ENC_EXTI_ISR_VEC) {
 }
 
 CH_IRQ_HANDLER(HW_ESTOP_EXTI_ISR_VEC) {
-  CH_IRQ_PROLOGUE();
+  if (EXTI_GetITStatus(HW_ESTOP_EXTI_LINE) != RESET) {
+    estop_state_change_handler();
 
-  estop_state_change_handler();
-
-  // Clear the EXTI line pending bit
-  EXTI_ClearITPendingBit(HW_ESTOP_EXTI_LINE);
-  CH_IRQ_EPILOGUE();
+    // Clear the EXTI line pending bit
+    EXTI_ClearITPendingBit(HW_ESTOP_EXTI_LINE);
+  }
 }
 
 CH_IRQ_HANDLER(HW_ENC_TIM_ISR_VEC) {
