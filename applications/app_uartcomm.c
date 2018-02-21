@@ -451,23 +451,22 @@ static void initHardware()
   set_estop_callback(app_handle_estop_interrupt);
 }
 
+/**
+ *  The packet interface provides functions to send data of our own internal message protocol
+ *  and wrap it in headers, footers, and checksum.
+ *
+ *  Sending data:
+ *  packet_send_packet() takes a payload, wraps it, and calls the first passed argument
+ *  (here, send_packet()) to deal with the actual transmission of the resultant buffer.
+ *
+ *  Receiving data:
+ *  packet_process_byte() should be called with every received byte. This runs a state machine
+ *  and calls the second argument passed (here, process_packet()) to handle the received packet.   
+ */
 void app_uartcomm_start(void)
 {
 
-  /**
-   *  The packet interface provides functions to send data of our own internal message protocol
-   *  and wrap it in headers, footers, and checksum.
-   *
-   *  Sending data:
-   *  packet_send_packet() takes a payload, wraps it, and calls the first passed argument
-   *  (here, send_packet()) to deal with the actual transmission of the resultant buffer.
-   *
-   *  Receiving data:
-   *  packet_process_byte() should be called with every received byte. This runs a state machine
-   *  and calls the second argument passed (here, process_packet()) to handle the received packet.   
-   *
-   *
-   */
+  
 	packet_init(send_packet, process_packet, PACKET_HANDLER);
 	uartStart(&HW_UART_DEV, &uart_cfg);
   initHardware();
@@ -596,12 +595,12 @@ static THD_FUNCTION(packet_process_thread, arg)
  * For testing purposes, you can have the VESC echo back a received request
  * instead of actually issuing the command
  */
-void echoCommand()
+static void echoCommand()
 {
   sendCommand(send_packet_wrapper, currentCommand);
 }
 
-void confirmationEcho()
+static void confirmationEcho()
 {
   uint8_t confirmationBuf[3] = {0, 0, 0};
   send_packet_wrapper(confirmationBuf, 3);
@@ -667,7 +666,7 @@ static void statusTaskCb(void* _)
 /*
  * Updates the feedback struct with current data
  */ 
-void updateFeedback(void)
+static void updateFeedback(void)
 {
   fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
@@ -677,20 +676,18 @@ void updateFeedback(void)
   fb.feedback.estop             = estop;
 }
 
-void updateStatus(void)
+static void updateStatus(void)
 {
   status.status.fault_code = mc_interface_get_fault();
 }
 
-void setCommand()
+static void setCommand()
 {
   switch (currentCommand.control_mode) {
     case SPEED:
-      echoCommand();
       mc_interface_set_pid_speed((float)currentCommand.target_cmd_i);
       break;
     case CURRENT:
-      echoCommand();
       mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
       break;
     default:
