@@ -7,5 +7,3 @@ uint8 FAULT_CODE_OVER_TEMP_FET = 5
 uint8 FAULT_CODE_OVER_TEMP_MOTOR = 6
 
 uint32 fault_code
-uint32 temp
-bool limits_set

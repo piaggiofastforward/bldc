@@ -102,7 +102,7 @@ void processFeedback(const mc_feedback &fb)
   msg.measured_position       = fb.measured_position;
   msg.supply_voltage          = fb.supply_voltage;
   msg.supply_current          = fb.supply_current;
-  msg.switch_flags            = fb.switch_flags;
+  msg.estop                   = fb.estop;
 
   feedback_to_publish[fbBufWriteIndex] = msg;
   fbBufWriteIndex = (fbBufWriteIndex + 1) % FEEDBACK_BUF_SIZE;
@@ -112,8 +112,6 @@ void processStatus(const mc_status &s)
 {
   vesc_driver::Status msg;
   msg.fault_code = s.fault_code;
-  msg.temp = s.temp;
-  msg.limits_set = s.limits_set;
 
   status_to_publish[statusBufWriteIndex] = msg;
   statusBufWriteIndex = (statusBufWriteIndex + 1) % FEEDBACK_BUF_SIZE;

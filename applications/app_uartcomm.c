@@ -674,14 +674,12 @@ void updateFeedback(void)
   fb.feedback.measured_position = encoder_abs_count();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
-  fb.feedback.switch_flags      = estop;
+  fb.feedback.estop             = estop;
 }
 
 void updateStatus(void)
 {
   status.status.fault_code = mc_interface_get_fault();
-  status.status.temp       = NTC_TEMP(ADC_IND_TEMP_MOS);
-  status.status.limits_set = 0;
 }
 
 void setCommand()
