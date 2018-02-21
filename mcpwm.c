@@ -80,7 +80,6 @@ static volatile mc_rpm_dep_struct rpm_dep;
 static volatile float cycle_integrator_sum;
 static volatile float cycle_integrator_iterations;
 static volatile mc_configuration *conf;
-static volatile mc_current_pid_configuration iq_pid;
 static volatile float pwm_cycles_sum;
 static volatile int pwm_cycles;
 static volatile float last_pwm_cycles_sum;
@@ -1232,7 +1231,6 @@ static void run_pid_control_pos(float dt) {
 		return;
 	}
 
-
 	// Compute error
 	float error = utils_angle_difference(encoder_read_deg(), pos_pid_set_pos);
 
@@ -1252,78 +1250,6 @@ static void run_pid_control_pos(float dt) {
 	utils_truncate_number(&output, -1.0, 1.0);
 
 	current_set = output * conf->lo_current_max;
-}
-
-void mcpwm_set_pid_current_parameters(float kp, float ki, float kd)
-{
-	iq_pid.kp = kp;
-	iq_pid.ki = ki;
-	iq_pid.kd = kd;
-	control_mode = CONTROL_MODE_CURRENT;
-}
-
-float mcpwm_get_last_pid_current_output(void)
-{
-	return iq_pid.last_output;
-}
-
-void mcpwm_set_pid_current(float setpoint_amps)
-{
-	if (fabsf(setpoint_amps) < conf->cc_min_current) {
-		control_mode = CONTROL_MODE_NONE;
-		stop_pwm_ll();
-		return;
-	}
-
-	utils_truncate_number(&setpoint_amps, -conf->l_current_max, conf->l_current_max);
-
-	control_mode = CONTROL_MODE_CURRENT;
-	iq_pid.setpoint = setpoint_amps;
-
-	if (state != MC_STATE_RUNNING) {
-		set_duty_cycle_hl(SIGN(iq_pid.setpoint) * conf->l_min_duty);
-	}
-}
-
-static void run_pid_control_current(float dt) {
-	static float i_term = 0;
-	static float prev_error = 0;
-	static float err_sum = 0;
-	float p_term;
-	float d_term;
-
-	// PID is off. Return.
-	if (control_mode != CONTROL_MODE_CURRENT) {
-		i_term = 0;
-		prev_error = 0;
-		return;
-	}
-	// Compute error
-	float current_nofilter = mcpwm_get_tot_current();
-	float error = iq_pid.setpoint - (direction ? current_nofilter : -current_nofilter);
-
-	// Compute parameters
-	p_term = error * iq_pid.kp;
-	err_sum += error * dt;
-	i_term = iq_pid.ki * err_sum;
-	d_term = (error - prev_error) * (iq_pid.kd / dt);
-
-	// I-term wind-up protection
-	utils_truncate_number(&i_term, -1.0, 1.0);
-
-	// Store previous error
-	prev_error = error;
-
-	// Calculate output
-	float output = p_term + i_term + d_term;
-
-	if (output > conf->lo_current_max)
-		output = conf->lo_current_max;
-	else if (output < conf->lo_current_min)
-		output = conf->lo_current_min;
-
-	iq_pid.last_output = output;
-	current_set = output;
 }
 
 static THD_FUNCTION(rpm_thread, arg) {
@@ -1959,8 +1885,6 @@ void mcpwm_adc_int_handler(void *p, uint32_t flags) {
 
 			pwm_cycles_sum += conf->m_bldc_f_sw_max / switching_frequency_now;
 			pwm_cycles++;
-
-		// Not sensorless!!!!
 		} else {
 			const int hall_phase = mcpwm_read_hall_phase();
 			if (comm_step != hall_phase) {
@@ -1977,8 +1901,6 @@ void mcpwm_adc_int_handler(void *p, uint32_t flags) {
 				commutate(0);
 			}
 		}
-
-	// not in BLDC mode!!!!
 	} else {
 		float amp = 0.0;
 
@@ -2148,8 +2070,7 @@ void mcpwm_adc_int_handler(void *p, uint32_t flags) {
 	mc_interface_mc_timer_isr();
 
 	if (encoder_is_configured()) {
-		// run_pid_control_pos(1.0 / switching_frequency_now);
-		run_pid_control_current(1.0 / switching_frequency_now);
+		run_pid_control_pos(1.0 / switching_frequency_now);
 	}
 
 	last_adc_isr_duration = (float)TIM12->CNT / 10000000.0;

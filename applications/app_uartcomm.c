@@ -41,7 +41,7 @@
 #include "ext_handler.h"
 
 // Settings
-#define PACKET_HANDLER				1
+#define PACKET_HANDLER				    1
 #define SERIAL_RX_BUFFER_SIZE		128
 #define MAX_BYTES_PER_READ      128
 
@@ -51,8 +51,9 @@ static THD_WORKING_AREA(packet_process_thread_wa, 4096);
 static thread_t *process_tp;
 
 /**
- * This buffer will be used for characters received through rxChar(). We should only be receiving the first 2 or 3 bytes
- * of a packet this way - when we parse the packet length, receive the rest of the data through uartStartReceive().
+ * This buffer will be used for characters received through rxChar(). We should 
+ * only be receiving the first 2 or 3 bytes of a packet this way - when we parse 
+ *  the packet length, receive the rest of the data through uartStartReceive().
  */
 static uint8_t serial_rx_buffer[SERIAL_RX_BUFFER_SIZE];
 static unsigned int serial_rx_read_pos = 0;
@@ -71,23 +72,22 @@ static int is_running = 0;
 volatile bool commandReceived      = false;
 volatile bool updateConfigReceived = false;
 volatile bool commitConfigReceived = false;
-static volatile bool estop = true;
+static volatile bool estop         = true;
 
 /**
  * State variables for coordinating characters received through rxChar() and through uartStartReceive(),
  * to ensure that we process bytes in the actual order that we received them.
  */ 
 
+typedef enum {
+  STATE_START_BYTE = 0, // looking to receive the start byte
+  STATE_PACKET_LEN,     // looking to receive the payload length
+  STATE_UART_RECEIVING  // uartStartReceive() has been called
+} uart_driver_state;
+static volatile uart_driver_state uart_state;
+
 // might need to change this later for REALLY BIG packets (ie: packets larger than 255)
 static volatile uint8_t packetLength = 0;
-static volatile bool startByteReceived = false;
-static volatile bool packetLengthReceived = false;
-
-// set this to true after calling uartStartReceive(), set back to false in rxEnd()
-static volatile bool uartReceiving = false;
-
-// this will be set through ext_handler in response to an interrupt on the estop pin
-static volatile bool shouldReadEstop = false;
 
 /**
  * Structs to hold various transaction and state data.
@@ -107,7 +107,6 @@ static void setHall(hall_table_t hall_table);
 static void setHallFoc(hall_table_foc_t hall_table);
 static void setCommand(void);
 static void sendConfigCommitConfirmation(void);
-static int getStringPotValue(void);
 volatile float *getParamPtr(enum mc_config_param param);
 
 /**
@@ -117,30 +116,32 @@ volatile float *getParamPtr(enum mc_config_param param);
 static virtual_timer_t feedback_task_vt;
 static virtual_timer_t status_task_vt;
 #define isPublishing() (chVTIsArmedI(&feedback_task_vt) || chVTIsArmedI(&status_task_vt))
-static void feedbackTaskCb(void* _);
-static void statusTaskCb(void* _);
-void updateFeedback(void);
-void updateStatus(void);
+static void feedback_task_cb(void* _);
+static void status_task_cb(void* _);
+static void update_feedback(void);
+static void update_status(void);
 
 /**
- *  In response to an interrupt from the estop pin, wait to account for button debounce,
- *  then read the pin.
+ *  In response to an interrupt from the estop pin, wait to account for button debounce, then
+ *  read the state through a timer interrupt. 
  */
-#define ESTOP_DEBOUNCE_MS 15  // PLENTY
-static void read_estop_wait(void);
+#define ESTOP_DEBOUNCE_MS 15 // PLENTY
+static virtual_timer_t estop_debounce_task_vt;
+static void read_estop_cb(void* _);
+static void handle_estop_interrupt(void);
 /**
  *  Enable/disable the virtual timer interrupts that prompt us to send feedback/status data. This 
  *  will be used when we get an FOC detection request.
  */
-static void disablePublishing(void);
-static void enablePublishing(void);
+static void disable_publishing(void);
+static void enable_publishing(void);
 
 /**
  *  Use this to aid in stopping/starting publishing when we receive a CONFIG_WRITE command.
  *  Schedule publishing to start up again in the amount of time below.
  */
 static virtual_timer_t start_pub_task_vt;
-static void startPubTaskCb(void* _);
+static void start_pub_task_cb(void* _);
 #define DELAY_CONFIG_WRITE_START_PUB_MS 50
 
 /**
@@ -169,20 +170,30 @@ static void send_packet(unsigned char *data, unsigned int len);
 /**
  * For testing purposes!
  */
-void echoCommand(void);
-void confirmationEcho(void);
+static void echo_command(void);
+static void confirmation_echo(void);
 
-
-// limit switches are probably going to be removed, and estop pin definitions have moved to hw60.h
-// #define ESTOP_PIN_INDEX  5
-#define FWDLIM_PIN_INDEX 3
-#define REVLIM_PIN_INDEX 4
-#define FWDLIM_PORT      GPIOA
-#define REVLIM_PORT      GPIOA
 
 /**
                         Function Definitions
 */
+
+/**                     APLICATION UART DRIVER
+ *
+ * We can receive data in 2 ways:
+ * 
+ * 1) Through the rxChar() interrupt. This will be called when we receive a character
+ *    but the application wasnt ready for it. Generally, this will occur on the first 
+ *    two bytes of an RX transaction - we need to receive the start byte as well as 
+ *    the packet length (so we know how many bytes to receive through the call to uartStartReceive()).
+ *
+ * 2) Through calls to uartReceive(). This will ensure a "proper" receiving of data - 
+ *    the rxchar() callback will not be invoked with every incoming byte. Instead, rxEnd() 
+ *    will be invoked when the number of bytes specified in the call to uartStartReceive() 
+ *    is reached. In general, the number of specified bytes to receive will be equivalent 
+ *    to the number of bytes left to receive in the packet. Thus, rxend() should 
+ *    be invoked once the last byte of an incoming transaction is received.
+ */
 
 /*
  * This callback is invoked when a transmission buffer has been completely
@@ -235,20 +246,22 @@ static void rxchar(UARTDriver *uartp, uint16_t c)
 	serial_rx_buffer[serial_rx_write_pos++] = c;
 
   // this is the start byte for messages with len < 255
-  if ((uint8_t)c == (uint8_t)2)
+  if (uart_state == STATE_START_BYTE)
   {
-    startByteReceived = true;
+    if ((uint8_t)c == (uint8_t)2)
+    {
+      uart_state = STATE_PACKET_LEN;
+    }
   }
 
-  // store the packetLength, accounting for 2 CRC bytes and a stop byte
-  if (startByteReceived && !packetLengthReceived)
+  // store the packetLength, accounting for 2 CRC bytes and a stop byte in addition
+  // to the payload itself
+  else if (uart_state == STATE_PACKET_LEN)
   {
     packetLength = c;
     packetLength += 3;
-    packetLengthReceived = true;
-    startByteReceived = false;
     uartStartReceive(&HW_UART_DEV, packetLength, uart_receive_buffer);
-    uartReceiving = true;
+    uart_state = STATE_UART_RECEIVING;
   }
 
 	if (serial_rx_write_pos == SERIAL_RX_BUFFER_SIZE) {
@@ -283,9 +296,7 @@ static void rxend(UARTDriver *uartp)
     }
     i++;
   }
-  packetLengthReceived = false;
-  startByteReceived = false;
-  uartReceiving = false;
+  uart_state = STATE_START_BYTE;
   chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
@@ -322,7 +333,7 @@ static void process_packet(unsigned char *data, unsigned int len)
 	{
 		case CONFIG_READ:
 
-			// need to implement
+			// currently no real need for this
 			break;
 
 		case CONTROL_WRITE:
@@ -340,20 +351,19 @@ static void process_packet(unsigned char *data, unsigned int len)
           chVTReset(&feedback_task_vt);
 
         shouldSendFeedback = true;
-        chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+        chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedback_task_cb, NULL);
       }
 			break;
 
 		case CONFIG_WRITE:
       if (isPublishing())
       {
-        disablePublishing();
+        disable_publishing();
       }
-      // start publishing again if we dont receive a config within 50 ms
-      chVTSet(&start_pub_task_vt, MS2ST(DELAY_CONFIG_WRITE_START_PUB_MS), startPubTaskCb, NULL);
+      // start publishing again if we dont receive a config within a specified amount of time
+      chVTSet(&start_pub_task_vt, MS2ST(DELAY_CONFIG_WRITE_START_PUB_MS), start_pub_task_cb, NULL);
       memcpy(config.config_bytes, data + 1, sizeof(mc_config));
       setParameter(config.config, &mcconf);
-			// updateConfigReceived = true;
 			break;
 
     case CONFIG_WRITE_HALL:
@@ -367,7 +377,7 @@ static void process_packet(unsigned char *data, unsigned int len)
     case COMMIT_MC_CONFIG:
       if (isPublishing())
       {
-        disablePublishing();
+        disable_publishing();
       }
       // at this point, dont start publishing until after we send the confirmation response
       chVTReset(&start_pub_task_vt);
@@ -377,10 +387,10 @@ static void process_packet(unsigned char *data, unsigned int len)
     case REQUEST_DETECT_HALL_FOC:
 
       // dont do things (like send feedback and accept commands to drive the motor!!!)
-      disablePublishing();
+      disable_publishing();
       detectHallTableFoc();
       chThdSleepMilliseconds(200);
-      enablePublishing();
+      enable_publishing();
       break;
 
 		default:
@@ -418,8 +428,10 @@ static void send_packet(unsigned char *data, unsigned int len)
 }
 
 /**
- * Initialize estop, fwd_limit, rev_limit switches, and UART pins.
- * Initialize EXT subsystem for hardware interrupts.
+ * Initialize UART and estop along with EXT subsystem for hardware interrupts.
+ * Our application-level callback function for handling estop state changes is
+ * passed to the ext_handler, since it makes more sense for EXT to live in the
+ * top-level and not within application code.
  */
 static void initHardware()
 {
@@ -431,19 +443,29 @@ static void initHardware()
       PAL_STM32_PUDR_PULLUP);
 
   palClearPad(HW_ESTOP_PORT, HW_ESTOP_PIN);
-  palClearPad(FWDLIM_PORT, FWDLIM_PIN_INDEX);
-  palClearPad(REVLIM_PORT, REVLIM_PIN_INDEX);
   palSetPadMode(HW_ESTOP_PORT, HW_ESTOP_PIN, PAL_MODE_INPUT_PULLUP);
-  palSetPadMode(FWDLIM_PORT, FWDLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
-  palSetPadMode(REVLIM_PORT, REVLIM_PIN_INDEX, PAL_MODE_INPUT_PULLUP);
 
-  estop     = READ_ESTOP();
+  estop = READ_ESTOP();
   configure_EXT();
-  set_estop_callback(app_handle_estop_interrupt);
+  set_estop_callback(handle_estop_interrupt);
 }
 
+/**
+ *  The packet interface provides functions to send data of our own internal message protocol
+ *  and wrap it in headers, footers, and checksum.
+ *
+ *  Sending data:
+ *  packet_send_packet() takes a payload, wraps it, and calls the first passed argument
+ *  (here, send_packet()) to deal with the actual transmission of the resultant buffer.
+ *
+ *  Receiving data:
+ *  packet_process_byte() should be called with every received byte. This runs a state machine
+ *  and calls the second argument passed (here, process_packet()) to handle the received packet.   
+ */
 void app_uartcomm_start(void)
 {
+
+  
 	packet_init(send_packet, process_packet, PACKET_HANDLER);
 	uartStart(&HW_UART_DEV, &uart_cfg);
   initHardware();
@@ -490,46 +512,22 @@ static THD_FUNCTION(packet_process_thread, arg)
 	process_tp = chThdGetSelfX();
 
   /**
-   * Initialize timers for feedback and status reports. These timers will set the shouldSendFeedback,
-   * shouldSendStatus, and shouldReadEncTicks flags in an interrupt context, and we will do the actual
+   * Initialize timers for feedback and status reports. These timers will set the shouldSendFeedback
+   * and shouldSendStatus flags in an interrupt context, and we will do the actual
    * operation in the main thread.
    */
   chVTObjectInit(&start_pub_task_vt);
   chVTObjectInit(&status_task_vt);
   chVTObjectInit(&feedback_task_vt);
-  chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
-  chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), statusTaskCb, NULL);
+  chVTObjectInit(&estop_debounce_task_vt);
+  chVTSet(&feedback_task_vt, MS2ST(FB_RATE_MS), feedback_task_cb, NULL);
+  chVTSet(&status_task_vt, MS2ST(STATUS_INITIAL_DELAY), status_task_cb, NULL);
 
 	while (1)
 	{
 		chEvtWaitAny((eventmask_t) 1);
 
-    if (shouldReadEstop)
-    {
-      read_estop_wait();
-      shouldReadEstop = false;
-    }
-
-    /**
-     * We can receive data in 2 ways:
-     * 
-     * 1) Through the rxChar() interrupt above. This will be called when we receive a character
-     *    but the application wasnt ready for it. Generally, this will occur on the first two bytes of an RX
-     *    transaction - we need to receive the start byte as well as the packet length (so we know how many bytes
-     *    to receive through the call to uartStartReceive()).
-     *
-     * 2) Through calls to uartReceive(). This will ensure a "proper" receiving of data - 
-     *    the rxchar() callback will not be invoked with every incoming byte. Instead, rxEnd() will be invoked
-     *    when the number of bytes specified in the call to uartStartReceive() is reached. In general, the number
-     *    of specified bytes to receive will be equivalent to the number of bytes left to receive in the packet.
-     *    Thus, rxend() should generally be invoked once the last byte of an incoming transaction is received.
-     *
-     *  "uartReceiving" will be set to true just after uartStartReceive() is called, and will be set back to false after
-     *  all of the bytes received in the uart_receive_buffer are placed into the serial_rx_buffer. This ensures bytes
-     *  received in both of the two above ways are processed correctly.
-     */
-
-    while (!uartReceiving && (serial_rx_read_pos != serial_rx_write_pos))
+    while (serial_rx_read_pos != serial_rx_write_pos)
     {
 
       /**
@@ -548,13 +546,13 @@ static THD_FUNCTION(packet_process_thread, arg)
      */
 		if (shouldSendFeedback)
     {
-      updateFeedback();
+      update_feedback();
       sendFeedbackData(send_packet_wrapper, fb);
       shouldSendFeedback = false;
     }
     if (shouldSendStatus)
     {
-      updateStatus();
+      update_status();
       sendStatusData(send_packet_wrapper, status);
       shouldSendStatus = false;
     }
@@ -568,13 +566,13 @@ static THD_FUNCTION(packet_process_thread, arg)
 
     if (commitConfigReceived)
     {
-      disablePublishing();
+      disable_publishing();
       conf_general_store_mc_configuration((mc_configuration *) &mcconf);
       mc_interface_set_configuration((mc_configuration *) &mcconf);
       chThdSleepMilliseconds(500);
       sendConfigCommitConfirmation();
       commitConfigReceived = false;
-      enablePublishing();
+      enable_publishing();
     }
 	}
 }
@@ -591,12 +589,12 @@ static THD_FUNCTION(packet_process_thread, arg)
  * For testing purposes, you can have the VESC echo back a received request
  * instead of actually issuing the command
  */
-void echoCommand()
+static void echo_command()
 {
   sendCommand(send_packet_wrapper, currentCommand);
 }
 
-void confirmationEcho()
+static void confirmation_echo()
 {
   uint8_t confirmationBuf[3] = {0, 0, 0};
   send_packet_wrapper(confirmationBuf, 3);
@@ -613,48 +611,48 @@ static void sendConfigCommitConfirmation(void)
 }
 
 // stop the timer interrupts that cause us to gather and publish feedback data
-static void disablePublishing(void)
+static void disable_publishing(void)
 {
   chVTReset(&feedback_task_vt);
   chVTReset(&status_task_vt);
 }
 
-static void enablePublishing(void)
+static void enable_publishing(void)
 {
-  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
-  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedback_task_cb, NULL);
+  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), status_task_cb, NULL);
 }
 
 /**
  * Set flags to indicate that we should publish feedback or status, handle in main thread.
  */
-static void startPubTaskCb(void* _)
+static void start_pub_task_cb(void* _)
 {
   (void)_;
   chSysLockFromISR();
-  enablePublishing();
+  enable_publishing();
   chSysUnlockFromISR();
 }
 
 /**
  * Set flags to indicate that we should publish feedback or status, handle in main thread.
  */
-static void feedbackTaskCb(void* _)
+static void feedback_task_cb(void* _)
 {
   (void)_;
   shouldSendFeedback = true;
   chSysLockFromISR();
-  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedbackTaskCb, NULL);
+  chVTSetI(&feedback_task_vt, MS2ST(FB_RATE_MS), feedback_task_cb, NULL);
   chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
 
-static void statusTaskCb(void* _)
+static void status_task_cb(void* _)
 {
   (void)_;
   shouldSendStatus = true;
   chSysLockFromISR();
-  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), statusTaskCb, NULL);
+  chVTSetI(&status_task_vt, MS2ST(STATUS_RATE_MS), status_task_cb, NULL);
   chEvtSignalI(process_tp, (eventmask_t) 1);
   chSysUnlockFromISR();
 }
@@ -662,50 +660,30 @@ static void statusTaskCb(void* _)
 /*
  * Updates the feedback struct with current data
  */ 
-void updateFeedback(void)
+static void update_feedback(void)
 {
   fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
   fb.feedback.measured_position = encoder_abs_count();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
-  fb.feedback.switch_flags      = estop;
+  fb.feedback.estop             = estop;
 }
 
-void updateStatus(void)
+static void update_status(void)
 {
   status.status.fault_code = mc_interface_get_fault();
-  status.status.temp       = NTC_TEMP(ADC_IND_TEMP_MOS);
-  status.status.limits_set = 0;
 }
 
-void setCommand()
+static void setCommand()
 {
   switch (currentCommand.control_mode) {
     case SPEED:
-      echoCommand();
       mc_interface_set_pid_speed((float)currentCommand.target_cmd_i);
       break;
     case CURRENT:
-      echoCommand();
       mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
-      // mc_interface_set_current((float)currentCommand.target_cmd_i / 1000.0);
       break;
-    // case DUTY:
-    //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;
-    //   mc_interface_set_duty(currentCommand.target_cmd_f);
-    //   break;
-    // case POSITION:
-    //   fb.feedback.commanded_value = currentCommand.target_cmd_i;
-    //   mc_interface_set_pid_pos(currentCommand.target_cmd_i);
-    //   break;
-    // case SCALE_POS:
-    //   fb.feedback.commanded_value = currentCommand.target_cmd_f * 1000;
-    //   mc_interface_set_pid_pos(descale_position(currentCommand.target_cmd_f));
-    //   break;
-    // case HOMING: 
-    //   fb.feedback.commanded_value = mc_interface_get_pid_pos_now();
-    //   homing_sequence();
     default:
       break;
   }
@@ -762,19 +740,26 @@ static void detectHallTableFoc(void)
   }
 }
 
-void app_handle_estop_interrupt(void)
+/**
+ *  In case someone presses the estop quickly several times, schedule the timer so that
+ *  the pin is read at time ESTOP_DEBOUNCE_MS after the last interrupt. 
+ */
+static void handle_estop_interrupt(void)
 {
-  shouldReadEstop = true;
+  chSysLockFromISR();
+  if (chVTIsArmedI(&estop_debounce_task_vt))
+  {
+    chVTResetI(&estop_debounce_task_vt); 
+  }
+  chVTSetI(&estop_debounce_task_vt, MS2ST(ESTOP_DEBOUNCE_MS), read_estop_cb, NULL);
   chEvtSignalI(process_tp, (eventmask_t) 1);
+  chSysUnlockFromISR();
 }
 
-static void read_estop_wait(void)
+static void read_estop_cb(void* _)
 {
-  chThdSleepMilliseconds(ESTOP_DEBOUNCE_MS);
+  (void)_;
+  chSysLock();
   estop = READ_ESTOP();
-}
-
-static int getStringPotValue(void)
-{
-  return ADC_Value[7];
+  chSysUnlock();
 }

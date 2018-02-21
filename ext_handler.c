@@ -1,5 +1,6 @@
 #include "ext_handler.h"
 #include "app.h"
+#include "nvic.h"
 
 /**
   Somebody else can use this to be notified when the estop state changes

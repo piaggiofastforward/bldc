@@ -89,8 +89,6 @@ static size_t readBytes(uint8_t * dest, unsigned int max_bytes)
 static void serialProcessPacket(unsigned char *data, unsigned int length)
 {
   mc_cmd cmd;
-  mc_config_current_pid_union i_pid;
-  // float value;
   char msg[80];
 
   switch (data[0])
@@ -138,12 +136,6 @@ static void serialProcessPacket(unsigned char *data, unsigned int length)
           ROS_ERROR_STREAM("Received CONTROL_WRITE of unknown type " << data[1]);
           break;
       }
-      break;
-
-    case CONFIG_WRITE_CURRENT_PID:
-      extractCurrentPIDDataF(i_pid, data);
-      ROS_WARN_STREAM("Received current PID echo: kp = " << i_pid.config.kp 
-        << ", ki = " << i_pid.config.ki << ", kd = " << i_pid.config.kd);
       break;
 
     /**

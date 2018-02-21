@@ -41,7 +41,6 @@ float app_adc_get_decoded_level2(void);
 float app_adc_get_voltage2(void);
 
 void app_uartcomm_start(void);
-void app_handle_estop_interrupt(void);
 void app_uartcomm_stop(void);
 void app_uartcomm_configure(uint32_t baudrate);
 

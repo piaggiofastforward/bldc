@@ -219,7 +219,7 @@ typedef struct {
   uint32_t measured_position;
   float supply_voltage;
   float supply_current;
-  uint32_t switch_flags;
+  uint8_t estop; // 1 if estop is active, 0 otherwise
 } mc_feedback;
 
 // a union to simplify sending feedback over i2c
@@ -234,8 +234,6 @@ typedef union {
 // The struct that represents a status message
 typedef struct {
   uint32_t fault_code;
-  uint32_t temp;
-  bool limits_set;
 } mc_status;
 
 // a union to simplify transferring statuses over i2c

@@ -137,12 +137,6 @@ static THD_WORKING_AREA(timer_thread_wa, 2048);
 static THD_FUNCTION(timer_thread, arg);
 static volatile bool timer_thd_stop;
 
-
-
-// aubrey functions
-static int default_pos_fun(void) {return m_tachometer;}
-static int (*pos_fun)(void) = default_pos_fun;
-
 // Macros
 #ifdef HW_HAS_3_SHUNTS
 #define TIMER_UPDATE_DUTY(duty1, duty2, duty3) \
@@ -570,10 +564,6 @@ void mcpwm_foc_set_pid_pos(float pos) {
 	if (m_state != MC_STATE_RUNNING) {
 		m_state = MC_STATE_RUNNING;
 	}
-}
-
-void mcpwm_foc_set_pid_pos_src(int (*pos_src)(void)) {
-  pos_fun = pos_src;
 }
 
 /**
