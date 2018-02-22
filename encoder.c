@@ -71,8 +71,8 @@ static bool index_found = false;
 static uint32_t enc_counts = 10000;
 static encoder_mode mode = ENCODER_MODE_NONE;
 static float last_enc_angle = 0.0;
-static volatile enc_abs_count_t enc_abs_count = 0;
-static enc_abs_count_t last_enc_count = 0;
+static volatile enc_continuous_count_t enc_continuous_count = 0;
+static enc_continuous_count_t last_enc_count = 0;
 
 // Private functions
 static void spi_transfer(uint16_t *in_buf, const uint16_t *out_buf, int length);
@@ -105,7 +105,7 @@ void encoder_init_abi(uint32_t counts) {
 	// Initialize variables
 	index_found = false;
 	enc_counts = counts;
-	enc_abs_count = 0;
+	enc_continuous_count = 0;
 
 	palSetPadMode(HW_ENC_GPIO1, HW_ENC_PIN1, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
 	palSetPadMode(HW_ENC_GPIO2, HW_ENC_PIN2, PAL_MODE_ALTERNATE(HW_ENC_TIM_AF));
@@ -284,7 +284,7 @@ static void add_encoder_ticks(const unsigned int current_enc_count)
 	}
 
 	last_enc_count = current_enc_count;
-	enc_abs_count += diff;
+	enc_continuous_count += diff;
 }
 
 /**
@@ -363,12 +363,12 @@ uint32_t encoder_counts(void)
 }
 
 /**
- *  Return the absolute encoder count, which is the total of all ticks in either direction
+ *  Return the continuous encoder count, which is the total of all ticks in either direction
  *  since startup.
  */
-enc_abs_count_t encoder_abs_count(void)
+enc_continuous_count_t encoder_continuous_count(void)
 {
-	return (enc_abs_count_t)enc_abs_count;
+	return (enc_continuous_count_t)enc_continuous_count;
 }
 
 /**

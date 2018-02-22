@@ -263,8 +263,8 @@ void terminal_process_string(char *str) {
 		} else {
 			commands_printf("This command requires one argument.\n");
 		}
-	} else if (strcmp(argv[0], "enc_abs_ticks") == 0) {
-		enc_abs_count_t counts = encoder_abs_count();
+	} else if (strcmp(argv[0], "enc_ticks") == 0) {
+		enc_continuous_count_t counts = encoder_continuous_count();
 		commands_printf("%lu\n", counts);
 	} else if (strcmp(argv[0], "enc_index_found") == 0) {
 		commands_printf("%d\n", encoder_index_found());

@@ -216,7 +216,7 @@ typedef union {
 typedef struct {
   float motor_current;
   int32_t measured_velocity;
-  uint32_t measured_position;
+  uint32_t measured_position;  // continuous encoder ticks tracking
   float supply_voltage;
   float supply_current;
   uint8_t estop; // 1 if estop is active, 0 otherwise

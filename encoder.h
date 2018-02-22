@@ -47,7 +47,7 @@ void encoder_update_abs_count(void);
 /**
  *  Keep track of absolute encoder ticks since we probably want to use that instead of rotor angle.
  */
-typedef uint32_t enc_abs_count_t;
-enc_abs_count_t encoder_abs_count(void);
+typedef uint32_t enc_continuous_count_t;
+enc_continuous_count_t encoder_continuous_count(void);
 
 #endif /* ENCODER_H_ */

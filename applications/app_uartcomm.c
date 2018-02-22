@@ -659,7 +659,7 @@ static void update_feedback(void)
 {
   fb.feedback.motor_current     = mc_interface_get_tot_current();
   fb.feedback.measured_velocity = mc_interface_get_rpm();
-  fb.feedback.measured_position = encoder_abs_count();
+  fb.feedback.measured_position = encoder_continuous_count();
   fb.feedback.supply_voltage    = GET_INPUT_VOLTAGE();
   fb.feedback.supply_current    = mc_interface_get_tot_current_in();
   fb.feedback.estop             = estop;
