@@ -8,6 +8,19 @@ Our vesc interface is done over `UART`, and all communication functionality can 
 - Feedback is published in response to received commands so the frequency is dictated by that of incoming data. A timer is implemented to provide a minimum feedback frequency of 50Hz if commands aren't being given.
 - Status publishing at 20Hz (configurable via `STATUS_RATE_MS`)
 
+## VESC Operation - General Instructions ##
+
+The base of the code is provided from `vedderb/bldc`, and we have mainly built up higher-level (relatively speaking) code in the `applications` folder which leverages Benjamin's code in order to command the motor and provide feedback for the current status of the system.
+
+The VESC tool allows a user to configure specific motors for operation. FOC is a precise algorithm - even differences between motors of the same make/model will be detected, so **each specific motor will need its own distinct configuration.** It's important to note that, whenever the VESC firmware is flashed (which may be quite frequenctly during development), IT ASSUMES THE DEFAULT CONFIGURATION, which is almost definitely not what you want! **Whenever you flash new code to the VESC you need to reflash your configuration with the VESC tool**! A well tuned motor will easily start up and drive with a `1A` setpoint, while a poorly tuned motor might not move at all.
+
+### Things to Remember ###
+
+Some particularly important configuration aspects to always check if the motor isn't moving smoothly:
+1. hall table detection
+2. RL and lambda detection (FOC only)
+
+
 ## Driver and Commander ##
 
 The folder `linux_impl` contains a Linux driver to send out commands to a VESC connected over UART. This driver uses the `serial::Serial` library and is intended for use along with an FTDI chip.
@@ -26,17 +39,7 @@ VESC firmware:
 `make` (`make upload` to flash)
 
 
-## VESC Operation - General Instructions ##
 
-The base of the code is provided from `vedderb/bldc`, and we have mainly built up higher-level (relatively speaking) code in the `applications` folder which leverages Benjamin's code in order to command the motor and provide feedback for the current status of the system.
-
-The VESC tool allows a user to configure specific motors for operation. FOC is a precise algorithm - even differences between motors of the same make/model will be detected, so **each specific motor will need its own distinct configuration.** It's important to note that, whenever the VESC firmware is flashed (which may be quite frequenctly during development), IT ASSUMES THE DEFAULT CONFIGURATION, which is almost definitely not what you want! **Whenever you flash new code to the VESC you need to reflash your configuration with the VESC tool**! A well tuned motor will easily start up and drive with a `1A` setpoint, while a poorly tuned motor might not move at all.
-
-### Things to Remember ###
-
-Some particularly important configuration aspects to always check if the motor isn't moving smoothly:
-1. hall table detection
-2. RL and lambda detection (FOC only)
 
 ## UART Protocol ##
 

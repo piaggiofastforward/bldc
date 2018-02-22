@@ -22,9 +22,18 @@ $(rospack find vesc_driver)/scripts/config_all.bash
 ~~~
 
 
-## Running the node ##
+## Running a single node ##
 
 Ex:
 ~~~
-roslaunch vesc_driver driver.launch motor_namespace:=rmotor port:=/dev/pff/rmotor is_drive_motor:=true
+roslaunch vesc_driver driver.launch motor_namespace:=rmotor port:=/dev/ttyUSB0
+~~~
+
+## Launching all 3 nodes ##
+
+NOTE: The default ports for each motor are setup similar to Gita - ex. `/dev/pff/rmotor` - in the anticipation that someone will make udev rules for the balance rig.
+
+Ex:
+~~~
+roslaunch vesc_driver driver.launch ns:=r4
 ~~~

@@ -2,7 +2,6 @@
 
   <arg name="port"/>
   <arg name="motor_namespace"/>
-  <arg name="is_drive_motor"/>
   <arg name="feedback_topic" default="feedback"/>
   <arg name="status_topic"   default="status"/>
   <arg name="cmd_topic"      default="cmd"/>
@@ -13,7 +12,6 @@
         output="screen">
 
     <param name="port" value="$(arg port)"/>
-    <param name="is_drive_motor" value="$(arg is_drive_motor)" />
     <param name="feedback_topic" value="$(arg feedback_topic)"/>
     <param name="status_topic" value="$(arg status_topic)"/>
     <param name="cmd_topic" value="$(arg cmd_topic)"/>

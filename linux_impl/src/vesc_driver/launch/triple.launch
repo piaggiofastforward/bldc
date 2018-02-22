@@ -1,0 +1,31 @@
+<launch>
+
+  <arg name="ns"/>
+
+  <arg name="rmotor_port" default="/dev/pff/rmotor" />
+  <arg name="lmotor_port" default="/dev/pff/lmotor" />
+  <arg name="bmotor_port" default="/dev/pff/bmotor" />
+
+  <group ns="$(arg ns)">
+
+    <!-- rmotor -->
+    <include file="$(find vesc_driver)/launch/driver.launch">
+      <arg name="motor_namespace" value="rmotor" />
+      <arg name="port" value="$(arg rmotor_port)" />
+    </include>
+
+    <!-- lmotor -->
+    <include file="$(find vesc_driver)/launch/driver.launch">
+      <arg name="motor_namespace" value="lmotor" />
+      <arg name="port" value="$(arg lmotor_port)" />
+    </include>
+
+    <!-- bmotor -->
+    <include file="$(find vesc_driver)/launch/driver.launch">
+      <arg name="motor_namespace" value="bmotor" />
+      <arg name="port" value="$(arg bmotor_port)" />
+    </include>
+
+  </group>
+
+</launch>
