@@ -471,11 +471,6 @@ void app_uartcomm_start(void)
   initHardware();
 
   mcconf = *mc_interface_get_configuration();
-
-  #if APP_USE_ENCODER
-    encoder_init_abi(mcconf.m_encoder_counts);
-  #endif
-
 	is_running = 1;
 
 	chThdCreateStatic(

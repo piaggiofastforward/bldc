@@ -65,10 +65,6 @@
 //#define HW_VERSION_RH
 #endif
 
-// use this to unconditionally configure the encoder, regardless of whether or not that is the
-// source used for commutation
-#define APP_USE_ENCODER true
-
 /*
  * Select default user motor configuration
  */
