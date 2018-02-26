@@ -39,6 +39,23 @@ VESC firmware:
 `make` (`make upload` to flash)
 
 
+# Hardware #
+
+## Differences between TESC (Terance-ESC) and VESC HW6.0 ##
+
+We had to make one change in `hw_60.h` to properly support the TESC. Stock VESC `6.0` does not support the simultaneous use of both encoder and hall sensors - the GPIO definitions for these pins were of the form `HW_HALL_ENC_GPIO_1`, for example. We have replaced these symbols with `HW_HALL_GPIO_1` and `HW_HALL_ENC_1` to support using both simultaneously.
+
+Additionally, there are 2 hardcoded ADC pins in `hw_init_gpio()` within `hw_60.c` that overlapped with our hall sensor pins. Those 2 hardcoded pins have been commented out - those pins serve multiple purposes and commenting them out does not appear to effect the system in any way.
+
+
+## Old hardware revisions ##
+
+Each hardware revision has its own configuration - many pins have different purposes between different revisions. The hardware version should be silkscreened somewhere on the VESC board itself. The PFF version of the VESC uses `hw6.0`, but we do have older VESC boards around the office with versions in the `4.x` range. If these boards do not need PFF application UART code (ie: someone will give commands to the VESC via USB with the VESC tool), follow these steps to build the firmware for the specific revision:
+
+1. clone https://github.com/vedderb/bldc
+2. inside `conf_general.h`, find the section that defines the hardware revision. Make sure every hardware revision is commented out, then uncomment the line corresponding to the hardware revision of the board in question.
+3. `make upload`
+
 
 
 ## UART Protocol ##
@@ -67,11 +84,3 @@ Please see `control_msgs.h` for in-depth descriptions of each message.
 ## Configuration and Hall Table Detection (UART) ##
 
 There is code to handle this, but the messaging protocol has since changed so proper messaging will have to be re-implemented for these features.
-
-# NOTES #
-
-For hardware version `6.0`, there is an overlap with hardcoded ADC channels and our hardware configuration. The revolution controller has the hall sensors on pins
-`PA5`, `PA6`, and `PA7` but the configuration in `hw60.c` has hardcoded 2 ADC channels on `PA5` and `PA6`.
-
-Previous versions of the VESC hardware/firmware overwrite pins `PA5` and `PA6` from their hard coded ADC functionality and use them for `SPI` and `I2C` procotols. therefore, for the time being, we are assuming that it is okay for us to overwrite those 2 pins and use them for hall sensor readings instead. 
->>>>>>> comment out the ADC pins whose definitions overlap with our hall sensor pins
