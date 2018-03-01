@@ -19,6 +19,8 @@ The VESC tool allows a user to configure specific motors for operation. FOC is a
 Some particularly important configuration aspects to always check if the motor isn't moving smoothly:
 1. hall table detection
 2. RL and lambda detection (FOC only)
+3. Encoder detection -> If using encoders as a commutation source instead of hall sensors, make sure to set BOTH `FOC->General->Sensor Mode = Encoder` AND
+`General->Sensor Port Mode = ABI Encoder`. Then, perform the encoder detection located in `FOC->Encoder`.
 
 
 ## Driver and Commander ##
