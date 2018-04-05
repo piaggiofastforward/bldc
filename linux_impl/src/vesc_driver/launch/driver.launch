@@ -1,7 +1,7 @@
 <launch>
 
-  <arg name="port"/>
-  <arg name="motor_namespace"/>
+  <arg name="port" value="/dev/ttyUSB0"/>
+  <arg name="motor_namespace" value="linkage"/>
   <arg name="feedback_topic" default="feedback"/>
   <arg name="status_topic"   default="status"/>
   <arg name="cmd_topic"      default="cmd"/>
@@ -16,5 +16,7 @@
     <param name="status_topic" value="$(arg status_topic)"/>
     <param name="cmd_topic" value="$(arg cmd_topic)"/>
   </node>
+
+  <node name="feedback_to_csv" pkg="vesc_driver" type="feedback_to_csv.py" />
 
 </launch>
