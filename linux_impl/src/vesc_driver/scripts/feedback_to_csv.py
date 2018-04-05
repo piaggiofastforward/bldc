@@ -27,6 +27,8 @@ class Listener(object):
     def run(self):
         rate = rospy.Rate(100)
         self.time_last = rospy.get_time()
+        print (self.time_last)
+
 
         while not rospy.is_shutdown():
             rate.sleep()

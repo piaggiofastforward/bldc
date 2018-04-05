@@ -6,6 +6,7 @@
   <arg name="status_topic"   default="status"/>
   <arg name="cmd_topic"      default="cmd"/>
 
+<!--
   <node name="$(arg motor_namespace)"
         pkg="vesc_driver"
         type="driver"
@@ -16,7 +17,7 @@
     <param name="status_topic" value="$(arg status_topic)"/>
     <param name="cmd_topic" value="$(arg cmd_topic)"/>
   </node>
-
-  <node name="feedback_to_csv" pkg="vesc_driver" type="feedback_to_csv.py" />
+-->
+  <node name="feedback_to_csv" pkg="vesc_driver" type="feedback_to_csv.py" output="screen" />
 
 </launch>
