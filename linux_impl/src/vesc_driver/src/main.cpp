@@ -30,17 +30,35 @@ int main(int argc, char** argv)
     fb_topic.c_str(), status_topic.c_str(), cmd_topic.c_str(), &nh
   );
 
+  #ifdef V6_EQUIPMENT_TESTING
+    if (!ros_handler.connected_)
+    {
+      ROS_ERROR("Maximum connection retries exceeded, aborting");
+      ros::shutdown();
+      return 0;
+    }
+  #endif
+
   // initialize vesc communication
   if (vesc::initComm(vesc::processFeedback, vesc::processStatus, port.c_str()) != 0)
+  {
     ROS_ERROR("Error setting up serial port!");
-
+    ros::shutdown();
+    return 0;
+  }
+  
   ROS_WARN("Listening for VESC commands...");
 
   nh.createTimer(
     ros::Duration(0.001),
     [] (const ros::TimerEvent &) { vesc::onMillisTick(); }
   );
-  while(ros::ok())
+
+  #ifdef V6_EQUIPMENT_TESTING
+    while(ros::ok() && ros_handler.connected_)
+  #else
+    while(ros::ok())
+  #endif
   {
     vesc::processBytes();
     if (vesc::feedbackMessagesPending())
