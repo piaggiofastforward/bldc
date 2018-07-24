@@ -30,15 +30,6 @@ int main(int argc, char** argv)
     fb_topic.c_str(), status_topic.c_str(), cmd_topic.c_str(), &nh
   );
 
-  #ifdef V6_EQUIPMENT_TESTING
-    if (!ros_handler.connected_)
-    {
-      ROS_ERROR("Maximum connection retries exceeded, aborting");
-      ros::shutdown();
-      return 0;
-    }
-  #endif
-
   // initialize vesc communication
   if (vesc::initComm(vesc::processFeedback, vesc::processStatus, port.c_str()) != 0)
   {
@@ -54,11 +45,7 @@ int main(int argc, char** argv)
     [] (const ros::TimerEvent &) { vesc::onMillisTick(); }
   );
 
-  #ifdef V6_EQUIPMENT_TESTING
-    while(ros::ok() && ros_handler.connected_)
-  #else
-    while(ros::ok())
-  #endif
+  while(ros::ok())
   {
     vesc::processBytes();
     if (vesc::feedbackMessagesPending())

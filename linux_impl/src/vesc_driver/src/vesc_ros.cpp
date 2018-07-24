@@ -50,30 +50,6 @@ RosHandler::RosHandler(const char* feedback_topic, const char* status_topic,
   feedback_pub_ = nh->advertise<vesc_driver::Feedback>(feedback_topic, 1);
   status_pub_ = nh->advertise<vesc_driver::Status>(status_topic, 1);
   command_sub_ = nh->subscribe(command_topic, 1, &RosHandler::commandCallback, this);
-
-  #ifdef V6_EQUIPMENT_TESTING
-    // Get log server info
-    nh->getParam("server_hostname", server_hostname_);
-    ROS_INFO("server_hostname_: %s", server_hostname_.c_str());
-
-    connected_ = connectToServer(server_hostname_);
-  #endif
-}
-#endif
-
-#ifdef V6_EQUIPMENT_TESTING
-bool RosHandler::connectToServer(std::string hostname)
-{
-  // Connect to TCP server
-  ROS_WARN("Attempting to connect to server");
-  fd_ = ConnectToTCPServer(server_hostname_.c_str(), TCP_SERVER_PORT);
-  if (fd_ > 0)
-  {
-    ROS_INFO("Connected");
-    return true;
-  }
-  else
-    return false;
 }
 #endif
 
@@ -101,26 +77,6 @@ void RosHandler::publishFeedback()
   if (!feedbackMessagesPending())
     return;
   feedback_pub_.publish(feedback_to_publish[fbBufReadIndex]);
-
-  #ifdef V6_EQUIPMENT_TESTING
-    VESC_READING_T log_data;
-    log_data.header.length = sizeof(VESC_READING_T);
-    log_data.header.type = VESC_READING;
-    gettimeofday(&log_data.header.timestamp, 0);
-    log_data.motor_current = feedback_to_publish[fbBufReadIndex].supply_current;
-    log_data.measured_velocity = feedback_to_publish[fbBufReadIndex].measured_velocity;
-    log_data.measured_position = feedback_to_publish[fbBufReadIndex].measured_position;
-    log_data.supply_voltage = feedback_to_publish[fbBufReadIndex].supply_voltage;
-    log_data.supply_current = feedback_to_publish[fbBufReadIndex].supply_current;
-    int bytes_sent = SendTCP(fd_, &log_data, sizeof(VESC_READING_T));
-    if (bytes_sent == SEND_ERROR)
-    {
-      // Server has likely stopped, so this will stop too
-      connected_ = false;
-      ROS_ERROR("TCP server non-responsive, shutting down");
-    }
-  #endif
-
   fbBufReadIndex = (fbBufReadIndex + 1) % FEEDBACK_BUF_SIZE;
 }
 

@@ -1,0 +1,13 @@
+<launch>
+
+    <!-- Args -->
+  <arg name="param_file" default="hw_setup.yaml"/>
+
+  <!-- Run node -->
+  <node name="vesc_driver" pkg="vesc_driver" type="driver" output="screen" required="true">
+
+    <!-- Params -->
+    <rosparam command="load" file="$(find pff_equipment_testing)/config/$(arg param_file)"/>
+  </node>
+
+</launch>

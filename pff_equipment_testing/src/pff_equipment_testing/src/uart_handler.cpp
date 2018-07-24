@@ -6,23 +6,23 @@
  * @param device_file 
  * @return int 
  */
-int UartHandler::OpenSerialDevice(char *device_file)
+int UartHandler::Open(const char *device_file)
 {
-  char *portname = device_file;
+  char *portname = (char *)device_file;
 
-  fd_ = open(portname, O_RDWR | O_NOCTTY | O_SYNC);
-  if (fd_ < 0)
+  int fd = open(portname, O_RDWR | O_NOCTTY | O_SYNC);
+  if (fd < 0)
   {
     printf("Error opening %s: %s\n", portname, strerror(errno));
     return -1;
   }
 
   // Baudrate 115200, 8 bits, no parity, 1 stop bit
-  SetInterfaceAttribs(fd_, B115200);
+  SetAttributes(fd, B115200);
 
   // Set to nonblocking mode
-  fcntl(fd_, F_SETFL, O_NONBLOCK);
-  return 0;
+  fcntl(fd, F_SETFL, O_NONBLOCK);
+  return fd;
 }
 
 /**
@@ -32,7 +32,7 @@ int UartHandler::OpenSerialDevice(char *device_file)
  * @param speed 
  * @return int 
  */
-int UartHandler::SetInterfaceAttribs(int fd, int speed)
+int UartHandler::SetAttributes(int fd, int speed)
 {
   struct termios tty;
 
@@ -76,14 +76,16 @@ int UartHandler::SetInterfaceAttribs(int fd, int speed)
  * @param length 
  * @return int 
  */
-int UartHandler::SerialWrite(char *data, ssize_t length)
+int UartHandler::Write(int fd, char *data, ssize_t length)
 {
-  int bytes_written = write(fd_, data, length);
+  int bytes_written = write(fd, data, length);
   if (bytes_written != length)
   {
     printf("Error from write: %d, %d\n", bytes_written, errno);
+    return -1;
   }
-  tcdrain(fd_); // Wait for write to complete
+  tcdrain(fd); // Wait for write to complete
+  return 0;
 }
 
 /**
@@ -93,8 +95,8 @@ int UartHandler::SerialWrite(char *data, ssize_t length)
  * @param length 
  * @return int 
  */
-int UartHandler::SerialRead(char * buffer, ssize_t length)
+int UartHandler::Read(int fd, char * buffer, ssize_t length)
 {
-  int bytes_read = read(fd_, buffer, length);
+  int bytes_read = read(fd, buffer, length);
   return bytes_read;
 }

@@ -26,11 +26,8 @@
 class UartHandler
 {
 public:
-  int OpenSerialDevice(char *device_file);
-  int SetInterfaceAttribs(int fd, int speed);
-  int SerialWrite(char *data, ssize_t length);
-  int SerialRead(char * buffer, ssize_t length);
-
-private:
-  int fd_;
+  static int Open(const char *device_file);
+  static int SetAttributes(int fd, int speed);
+  static int Write(int fd, char *data, ssize_t length);
+  static int Read(int fd, char * buffer, ssize_t length);
 };

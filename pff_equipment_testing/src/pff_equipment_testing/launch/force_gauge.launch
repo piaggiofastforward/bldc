@@ -1,0 +1,13 @@
+<launch>
+
+  <!-- Args -->
+  <arg name="param_file" default="hw_setup.yaml"/>
+
+  <!-- Run node -->
+  <node name="force_gauge_reader" pkg="pff_equipment_testing" type="force_gauge_reader" output="screen" required="true">
+
+    <!-- Params -->
+    <rosparam command="load" file="$(find pff_equipment_testing)/config/$(arg param_file)"/>
+  </node>
+
+</launch>
