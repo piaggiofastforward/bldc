@@ -35,41 +35,55 @@ class ForceGaugeReader : public PFFNode
 
     virtual void update()
     {
-      // Ask for data
-      char get_data = '?';
-      int bytes_written = UartHandler::Write(device_fd_, &get_data, sizeof(char));
-      if (bytes_written < 0)
+      // Force gauge updates too fast to read at a set loop rate
+      // To fix this we will read quickly but only publish at the selected rate
+      ros::Duration publish_rate = ros::Duration(1.0 / (double)loop_rate_);
+      ros::Time last_message_time = ros::Time::now();
+      ros::Time time_now;
+      while (!signal_shutdown)
       {
-        ROS_ERROR("Error writing data to %s, shutting down", device_file_.c_str());
-        ros::shutdown();
-      }
-      else
-      {
-        // Read response
-        int bytes_read = UartHandler::Read(device_fd_, &buffer_, 1);
-        if (bytes_read == 1)
+        // Ask for data
+        char get_data = '?';
+        int bytes_written = UartHandler::Write(device_fd_, &get_data, sizeof(char));
+        if (bytes_written < 0)
         {
-
-          // Print message on CR character
-          if ((int)buffer_ == CR)
+          ROS_ERROR("Error writing data to %s, shutting down", device_file_.c_str());
+          ros::shutdown();
+        }
+        else
+        {
+          // Read response
+          int bytes_read = UartHandler::Read(device_fd_, &buffer_, 1);
+          if (bytes_read == 1)
           {
-            pff_equipment_testing::ForceGaugeData data;
-            timeval time_now;
-            gettimeofday(&time_now, 0);
-            data.timestamp.sec = time_now.tv_sec;
-            data.timestamp.usec = time_now.tv_usec;
-            data.reading = GetValue(byte_stream_);
-            byte_stream_.clear();
-            data_publisher_.publish(data);
+
+            // Print message on CR character
+            if ((int)buffer_ == CR)
+            {
+              pff_equipment_testing::ForceGaugeData data;
+              timeval time_now;
+              gettimeofday(&time_now, 0);
+              data.timestamp.sec = time_now.tv_sec;
+              data.timestamp.usec = time_now.tv_usec;
+              data.reading = GetValue(byte_stream_);
+              byte_stream_.clear();
+
+              ros::Duration wait_time = ros::Duration(ros::Time::now() - last_message_time);
+              if (wait_time >= publish_rate)
+              {
+                last_message_time = ros::Time::now();
+                data_publisher_.publish(data);
+              }
+            }
+
+            // Ignore nulls
+            else if ((int)buffer_ == NULL_CHAR || (int)buffer_ == LF)
+              return;
+
+            // Buffer message on any other character
+            else
+              byte_stream_.push_back(buffer_);
           }
-
-          // Ignore nulls
-          else if ((int)buffer_ == NULL_CHAR || (int)buffer_ == LF)
-            return;
-
-          // Buffer message on any other character
-          else
-            byte_stream_.push_back(buffer_);
         }
       }
     }

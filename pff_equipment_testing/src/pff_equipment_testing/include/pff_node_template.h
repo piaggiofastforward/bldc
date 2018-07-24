@@ -107,10 +107,13 @@ class PFFNode
       shutdown_callback();
     }
 
+  protected:
+
+    int loop_rate_; // hz
+
   private:
 
     // Variables
-    int loop_rate_; // hz
     bool queue_threading_;
     int queue_thread_count_;
     bool use_sim_time_;

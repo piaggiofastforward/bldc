@@ -86,6 +86,13 @@ class LogServer : public PFFNode
     void VescDataCb(const vesc_driver::Feedback message)
     {
       ROS_INFO("Received Vesc data");
+      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "] "
+        << "Vesc Reading: "
+        << "  " << "motor_current: " << message.motor_current << std::endl
+        << "  " << "measured_velocity: " << message.measured_velocity << std::endl
+        << "  " << "measured_position: " << message.measured_position << std::endl
+        << "  " << "supply_voltage: " << message.supply_voltage << std::endl
+        << "  " << "supply_current: " << message.supply_current << std::endl;
       heartbeat("vesc_data");
     }
 

@@ -76,7 +76,12 @@ void RosHandler::publishFeedback()
 {
   if (!feedbackMessagesPending())
     return;
-  feedback_pub_.publish(feedback_to_publish[fbBufReadIndex]);
+  vesc_driver::Feedback feedback_msg = feedback_to_publish[fbBufReadIndex];
+  timeval time_now;
+  gettimeofday(&time_now, 0);
+  feedback_msg.timestamp.sec = time_now.tv_sec;
+  feedback_msg.timestamp.usec = time_now.tv_usec;
+  feedback_pub_.publish(feedback_msg);
   fbBufReadIndex = (fbBufReadIndex + 1) % FEEDBACK_BUF_SIZE;
 }
 
