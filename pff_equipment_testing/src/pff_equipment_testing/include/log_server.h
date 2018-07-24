@@ -58,8 +58,8 @@ class LogServer : public PFFNode
     void ArduinoDataCb(const pff_equipment_testing::ArduinoData message)
     {
       ROS_INFO("Received Arduino data");
-      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "] "
-        << "Arduino Reading: "
+      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "],"
+        << "Arduino"
         << message.reading << std::endl;
       heartbeat("arduino_data");
     }
@@ -72,8 +72,8 @@ class LogServer : public PFFNode
     void ForceGaugeDataCb(const pff_equipment_testing::ForceGaugeData message)
     {
       ROS_INFO("Received Force Gauge data");
-      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "] "
-        << "Force Gauge Reading: "
+      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "],"
+        << "Force Gauge,"
         << message.reading << std::endl;
       heartbeat("force_guage_data");
     }
@@ -86,13 +86,13 @@ class LogServer : public PFFNode
     void VescDataCb(const vesc_driver::Feedback message)
     {
       ROS_INFO("Received Vesc data");
-      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "] "
-        << "Vesc Reading: "
-        << "  " << "motor_current: " << message.motor_current << std::endl
-        << "  " << "measured_velocity: " << message.measured_velocity << std::endl
-        << "  " << "measured_position: " << message.measured_position << std::endl
-        << "  " << "supply_voltage: " << message.supply_voltage << std::endl
-        << "  " << "supply_current: " << message.supply_current << std::endl;
+      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "],"
+        << "Vesc,"
+        << "motor_current," << message.motor_current << ","
+        << "measured_velocity," << message.measured_velocity << ","
+        << "measured_position," << message.measured_position << ","
+        << "supply_voltage," << message.supply_voltage << ","
+        << "supply_current," << message.supply_current << std::endl;
       heartbeat("vesc_data");
     }
 

@@ -3,13 +3,13 @@ loop_rate: 100
 log_location: /home/jwhite/bldc/pff_equipment_testing/src/pff_equipment_testing/
 
 # Arduino params
-arduino_device_file: /dev/ttyUSB1
+arduino_device_file: /dev/ttyUSB0
 
 # Force gauge params
 force_gauge_device_file: /dev/ttyACM0
 
 # Vesc params
-port: /dev/ttyUSB0
+port: /dev/ttyUSB1
 motor_namespace: linkage
 feedback_topic: feedback
 status_topic: status
