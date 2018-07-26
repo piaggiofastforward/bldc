@@ -31,7 +31,7 @@ class LogServer : public PFFNode
         ROS_ERROR("Provided log directory does not exist, defaulting to ~/.ros/");
         log_location_ = "";
       }
-      log_location_ += "Aggregated_Logs.dat";
+      log_location_ += "Aggregated_Logs.csv";
 
       log_ = new std::ofstream(log_location_.c_str(), std::ios::trunc);
 
@@ -59,7 +59,7 @@ class LogServer : public PFFNode
     {
       ROS_INFO("Received Arduino data");
       *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "],"
-        << "Arduino"
+        << "Arduino,"
         << message.reading << std::endl;
       heartbeat("arduino_data");
     }

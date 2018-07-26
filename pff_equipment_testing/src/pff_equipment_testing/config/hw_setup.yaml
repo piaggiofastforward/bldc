@@ -1,6 +1,6 @@
 # Global params
 loop_rate: 100
-log_location: /home/jwhite/bldc/pff_equipment_testing/src/pff_equipment_testing/
+log_location: ~/.ros/
 
 # Arduino params
 arduino_device_file: /dev/ttyUSB0
