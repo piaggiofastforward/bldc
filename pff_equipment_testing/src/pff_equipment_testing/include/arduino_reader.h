@@ -6,6 +6,25 @@
 #include <vector>
 #include <string>
 
+// TODO: This is a total hack to get it to work well enough for Andy to use
+// There is an unexplained delay every ~1ms reading the UART device which should 
+// be fixed for this to be reused in the future
+// Uncomment line 113 and this will immediately become noticeable
+#define US_PER_SEC 350000.0
+#define US_DELAY 50
+
+inline void check_time(std::chrono::high_resolution_clock::time_point start_time, std::string tag, int arg=0)
+{
+  // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start_time).count();
+  // if (duration > 200 || arg != 0)
+  // {
+  //   if (arg == 0)
+  //     std::cout << "[" << tag << "]" << " took " << duration << " (us)" << std::endl;
+  //   else
+  //     std::cout << "[" << tag << "]" << " took " << duration << " (us)" << " count: " << arg << std::endl;
+  // }
+}
+
 class ArduinoReader : public PFFNode
 {
   public:
@@ -15,6 +34,7 @@ class ArduinoReader : public PFFNode
     bool connected_;
     std::vector<char> byte_stream_;
     char buffer_;
+    std::shared_ptr<pff_equipment_testing::ArduinoData> publish_buffer_;
 
     ArduinoReader() : PFFNode()
     {
@@ -34,29 +54,77 @@ class ArduinoReader : public PFFNode
 
     virtual void update()
     {
-      int bytes_read = UartHandler::Read(device_fd_, &buffer_, 1);
-      if (bytes_read == 1)
+      // Arduino updates too fast to read at a set loop rate
+      // To fix this we will read quickly but only publish at the selected rate
+      double publish_rate_us = US_PER_SEC * (1.0 / (double)loop_rate_);
+      // ROS_WARN("Rate is %i:%i", publish_rate.sec, publish_rate.nsec);
+      ros::Time last_message_time = ros::Time::now();
+      ros::Time time_now;
+      time_1_ = std::chrono::high_resolution_clock::now();
+      std::chrono::high_resolution_clock::time_point start_time;
+      publish_buffer_ = NULL;
+      int counter = 0;
+      while (!signal_shutdown)
       {
-        // Print message on CR character
-        if ((int)buffer_ == CR)
+        check_time(start_time, "loop");
+
+
+        start_time = std::chrono::high_resolution_clock::now();
+        int bytes_read = UartHandler::Read(device_fd_, &buffer_, 1);
+        check_time(start_time, "read");
+
+
+        if (bytes_read == 1)
         {
-          pff_equipment_testing::ArduinoData data;
-          timeval time_now;
-          gettimeofday(&time_now, 0);
-          data.timestamp.sec = time_now.tv_sec;
-          data.timestamp.usec = time_now.tv_usec;
-          data.reading = GetValue(byte_stream_);
-          byte_stream_.clear();
-          data_publisher_.publish(data);
+          // Print message on CR character
+          if ((int)buffer_ == CR)
+          {
+            start_time = std::chrono::high_resolution_clock::now();
+            auto data = std::make_shared<pff_equipment_testing::ArduinoData>();
+            timeval time_now;
+            gettimeofday(&time_now, 0);
+            data->timestamp.sec = time_now.tv_sec;
+            data->timestamp.usec = time_now.tv_usec;
+            data->reading = GetValue(byte_stream_);
+            byte_stream_.clear();
+
+            publish_buffer_ = data;
+            check_time(start_time, "create message");
+          }
+
+          // Ignore nulls
+          else if ((int)buffer_ != NULL_CHAR && (int)buffer_ != LF)
+          {
+            start_time = std::chrono::high_resolution_clock::now();
+            byte_stream_.push_back(buffer_);
+            check_time(start_time, "NULL check");
+          }
+
+          // Send things
+          start_time = std::chrono::high_resolution_clock::now();
+          time_2_ = std::chrono::high_resolution_clock::now();
+          auto duration = std::chrono::duration_cast<std::chrono::microseconds>(time_2_ - time_1_).count();
+
+          if (publish_buffer_ != NULL && duration >= publish_rate_us)
+          {
+            last_message_time = ros::Time::now();
+            data_publisher_.publish(*publish_buffer_);
+            check_time(time_1_, "sending", counter);
+            //std::cout << "Duration: " << duration << " publish_rate_us: " << publish_rate_us << std::endl;
+            publish_buffer_ = NULL;
+            time_1_ = std::chrono::high_resolution_clock::now();
+            counter = 0;
+          }
+          else
+            counter++;
+          check_time(start_time, "publish");
         }
-
-        // Ignore nulls
-        else if ((int)buffer_ == NULL_CHAR || (int)buffer_ == LF)
-          return;
-
-        // Buffer message on any other character
         else
-          byte_stream_.push_back(buffer_);
+        {
+          counter++;
+          usleep(3);
+        }
+        start_time = std::chrono::high_resolution_clock::now();
       }
     }
 

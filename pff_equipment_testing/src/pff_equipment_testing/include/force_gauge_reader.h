@@ -78,7 +78,7 @@ class ForceGaugeReader : public PFFNode
 
             // Ignore nulls
             else if ((int)buffer_ == NULL_CHAR || (int)buffer_ == LF)
-              return;
+              continue;
 
             // Buffer message on any other character
             else

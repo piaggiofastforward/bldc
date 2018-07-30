@@ -34,6 +34,7 @@ class LogServer : public PFFNode
       log_location_ += "Aggregated_Logs.csv";
 
       log_ = new std::ofstream(log_location_.c_str(), std::ios::trunc);
+      *log_ << "Seconds,Microseconds,Arduino Reading,Force Gauge Reading,Vesc Motor Current,Vesc Measured Velocity,Vesc Measured Position,Vesc Supply Voltage,Vesc Supply Current" << std::endl;
 
       // Arduino
       arduino_subscriber_ = nh_.subscribe("arduino_data", 10, &LogServer::ArduinoDataCb, this);
@@ -55,12 +56,27 @@ class LogServer : public PFFNode
         delete log_;
     }
 
+    void print_to_csv(const pff_equipment_testing::ArduinoData * arduino_data=NULL, const pff_equipment_testing::ForceGaugeData * force_gauge_data=NULL, const vesc_driver::Feedback * vesc_data=NULL)
+    {
+      if (arduino_data)
+      {
+        *log_ << arduino_data->timestamp.sec << "," << arduino_data->timestamp.usec  << "," << arduino_data->reading  << ",,,,,,," << std::endl;
+      }
+      if (force_gauge_data)
+      {
+        *log_ << force_gauge_data->timestamp.sec << "," << force_gauge_data->timestamp.usec  << ",," << force_gauge_data->reading  << ",,,,,," << std::endl;
+      }
+      if (vesc_data)
+      {
+        *log_ << vesc_data->timestamp.sec << "," << vesc_data->timestamp.usec  << ",,," << vesc_data->motor_current << "," << vesc_data->measured_velocity << "," << vesc_data->measured_position << "," << vesc_data->supply_voltage << "," << vesc_data->supply_current << std::endl;
+      }
+
+    }
+
     void ArduinoDataCb(const pff_equipment_testing::ArduinoData message)
     {
       ROS_INFO("Received Arduino data");
-      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "],"
-        << "Arduino,"
-        << message.reading << std::endl;
+      print_to_csv(&message, NULL, NULL);
       heartbeat("arduino_data");
     }
 
@@ -72,9 +88,7 @@ class LogServer : public PFFNode
     void ForceGaugeDataCb(const pff_equipment_testing::ForceGaugeData message)
     {
       ROS_INFO("Received Force Gauge data");
-      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "],"
-        << "Force Gauge,"
-        << message.reading << std::endl;
+      print_to_csv(NULL, &message, NULL);
       heartbeat("force_guage_data");
     }
 
@@ -86,13 +100,7 @@ class LogServer : public PFFNode
     void VescDataCb(const vesc_driver::Feedback message)
     {
       ROS_INFO("Received Vesc data");
-      *log_ << "[" << message.timestamp.sec << ":" << message.timestamp.usec << "],"
-        << "Vesc,"
-        << "motor_current," << message.motor_current << ","
-        << "measured_velocity," << message.measured_velocity << ","
-        << "measured_position," << message.measured_position << ","
-        << "supply_voltage," << message.supply_voltage << ","
-        << "supply_current," << message.supply_current << std::endl;
+      print_to_csv(NULL, NULL, &message);
       heartbeat("vesc_data");
     }
 

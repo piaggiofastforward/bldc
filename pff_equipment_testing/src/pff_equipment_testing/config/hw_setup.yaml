@@ -1,15 +1,15 @@
 # Global params
 loop_rate: 100
-log_location: ~/.ros/
+log_location: /home/jwhite/bldc/pff_equipment_testing
 
 # Arduino params
-arduino_device_file: /dev/ttyUSB0
+arduino_device_file: /dev/pff/arduino_uno
 
 # Force gauge params
-force_gauge_device_file: /dev/ttyACM0
+force_gauge_device_file: /dev/pff/force_gauge
 
 # Vesc params
-port: /dev/ttyUSB1
+port: /dev/pff/vesc
 motor_namespace: linkage
 feedback_topic: feedback
 status_topic: status
