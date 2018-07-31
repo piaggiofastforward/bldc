@@ -1,0 +1,16 @@
+# Global params
+loop_rate: 100
+log_location: ~/
+
+# Arduino params
+arduino_device_file: /dev/pff/arduino_uno
+
+# Force gauge params
+force_gauge_device_file: /dev/pff/force_gauge
+
+# Vesc params
+port: /dev/pff/vesc
+motor_namespace: linkage
+feedback_topic: feedback
+status_topic: status
+cmd_topic: cmd

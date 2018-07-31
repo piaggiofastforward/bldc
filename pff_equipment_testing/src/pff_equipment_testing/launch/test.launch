@@ -1,0 +1,16 @@
+<launch>
+
+  <!-- Arduino -->
+  <include file="$(find pff_equipment_testing)/launch/arduino.launch"></include>
+
+  <!-- Force Gauge -->
+  <include file="$(find pff_equipment_testing)/launch/force_gauge.launch"></include>
+
+  <!-- Vesc -->
+  <include file="$(find pff_equipment_testing)/launch/vesc.launch"></include>
+
+  <!-- Log Server -->
+  <include file="$(find pff_equipment_testing)/launch/log_server.launch"></include>
+
+</launch>
+

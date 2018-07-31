@@ -3,3 +3,7 @@
 build
 .dep
 devel
+equipment_testing/rpi/Aggregated_Logs.dat
+equipment_testing/rpi/rpi
+.vscode
+pff_equipment_testing/src/pff_equipment_testing/Aggregated_Logs.dat

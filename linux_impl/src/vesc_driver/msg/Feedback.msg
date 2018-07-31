@@ -1,3 +1,4 @@
+Timestamp timestamp
 float32 motor_current
 int32 commanded_value
 int32 measured_velocity

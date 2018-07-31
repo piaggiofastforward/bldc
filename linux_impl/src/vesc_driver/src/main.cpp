@@ -32,14 +32,19 @@ int main(int argc, char** argv)
 
   // initialize vesc communication
   if (vesc::initComm(vesc::processFeedback, vesc::processStatus, port.c_str()) != 0)
+  {
     ROS_ERROR("Error setting up serial port!");
-
+    ros::shutdown();
+    return 0;
+  }
+  
   ROS_WARN("Listening for VESC commands...");
 
   nh.createTimer(
     ros::Duration(0.001),
     [] (const ros::TimerEvent &) { vesc::onMillisTick(); }
   );
+
   while(ros::ok())
   {
     vesc::processBytes();

@@ -1,0 +1,2 @@
+Timestamp timestamp
+int32 reading
